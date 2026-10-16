@@ -1,0 +1,10 @@
+rules_version = '2';
+// The browser never reads or writes Firestore directly: all access goes through the
+// Cloud Run server (Admin SDK), which checks the visitor's Firebase ID token.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
