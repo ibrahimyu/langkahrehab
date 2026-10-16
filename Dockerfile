@@ -2,7 +2,8 @@
 FROM node:22-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci
+# Scripts are skipped here because postinstall (nuxt prepare) needs the source; the build runs it.
+RUN npm ci --ignore-scripts
 COPY . .
 RUN npm run build
 

@@ -8,7 +8,7 @@ Write in ${languageName[lang]}. Plain text, no tables, at most 180 words. Use th
 Adherence / Pain / Phantom limb pain / Safety and skin / What the patient said / To discuss
 
 Rules:
-- Use the numbers in "stats" exactly as given; do not recalculate them.
+- Use the numbers in "stats" exactly as given; do not recalculate them. Write them as a clinician would ("88% of planned sets done"); never show field names or JSON from the data.
 - Describe trends with dates (for example "pain after rose from 3 to 6 over two weeks").
 - Give the date of every safety concern and of every skin check marked contact_soon or urgent.
 - "What the patient said" comes from memories and diary notes.

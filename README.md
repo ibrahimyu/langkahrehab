@@ -6,7 +6,7 @@
 
 | | |
 |---|---|
-| Live prototype | `[deployed link]` |
+| Live prototype | https://langkah-148056386681.asia-southeast2.run.app |
 | Demo video | `[video link]` |
 | Pitch deck | `[deck link]` |
 
