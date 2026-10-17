@@ -79,16 +79,7 @@ const roleKey = { patient: "rolePatient", physio: "rolePhysio", doctor: "roleDoc
 const mainGoal = computed(() => p.value?.goals.find((g) => g.main)?.text ?? goal.value);
 const painList = computed(() => [...(p.value?.sessions ?? [])].reverse().slice(0, 14));
 // The pain sheet: before/after per session (oldest first), the doctor's limit, and what the trend means.
-const painChart = computed(() => [...painList.value].reverse().filter((s) => s.painAfter !== null || s.painBefore !== null));
-const painTrend = computed(() => {
-  const after = painChart.value.map((s) => s.painAfter).filter((v): v is number => v !== null);
-  if (after.length < 3) return null;
-  const first = Math.round((after[0]! + after[1]!) / 2);
-  const last = Math.round((after.at(-1)! + after.at(-2)!) / 2);
-  const limit = p.value!.plan.painThreshold;
-  const kind = last >= limit ? "over" : last > first ? "up" : last < first ? "down" : "same";
-  return { kind, first, last, limit };
-});
+const painPoints = computed(() => [...painList.value].reverse().map((s) => ({ id: s.id, at: s.at, before: s.painBefore, after: s.painAfter })));
 
 // ---- Now card, next step, other foot, and true moments of progress (PAS-01) ----
 const minutes = computed(() => (p.value ? planMinutes(p.value.plan.items) : 0));
@@ -260,20 +251,7 @@ async function askCheckup() {
     </div>
   </UiSheet>
   <UiSheet :open="sheet === 'pain'" :title="T('pain')" @close="sheet = null">
-    <section v-if="p && painChart.length" class="pain-detail">
-      <p v-if="painTrend" class="pain-say" :class="`trend-${painTrend.kind}`">{{ T(`painTrend_${painTrend.kind}` as TextKey, { a: painTrend.first, b: painTrend.last, limit: painTrend.limit }) }}</p>
-      <div class="pain-chart" role="img" :aria-label="T('pain')">
-        <span class="pain-limit" :style="{ bottom: `${(p.plan.painThreshold / 10) * 100}%` }"><span>{{ T("painLimitN", { n: p.plan.painThreshold }) }}</span></span>
-        <div v-for="s in painChart" :key="s.id" class="pain-col">
-          <div class="pain-pair">
-            <i class="before" :style="{ height: `${((s.painBefore ?? 0) / 10) * 100}%` }"><b>{{ s.painBefore ?? "" }}</b></i>
-            <i class="after" :class="{ high: s.painAfter !== null && s.painAfter >= p.plan.painThreshold }" :style="{ height: `${((s.painAfter ?? 0) / 10) * 100}%` }"><b>{{ s.painAfter ?? "" }}</b></i>
-          </div>
-          <span class="pain-day">{{ fmt(s.at, { day: "numeric" }) }}</span>
-        </div>
-      </div>
-      <p class="pain-legend hint"><i class="before" /> {{ T("painBefore") }} <i class="after" /> {{ T("painAfterShort") }}</p>
-    </section>
+    <PainChart v-if="p" :points="painPoints" :limit="p.plan.painThreshold" />
     <ul v-if="p" class="detail-list">
       <li v-for="s in painList" :key="s.id">
         <span class="detail-main">
@@ -287,25 +265,6 @@ async function askCheckup() {
 </template>
 
 <style scoped>
-.pain-detail { display: grid; gap: 10px; margin-bottom: 12px; }
-.pain-say { margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--sunken); font-weight: 600; }
-.pain-say.trend-up, .pain-say.trend-over { background: var(--dawn-soft); }
-.pain-say.trend-down { background: var(--pine-soft); }
-.pain-chart { position: relative; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 4px; height: 160px; padding-top: 8px; border-bottom: 1px solid var(--line); }
-.pain-limit { position: absolute; left: 0; right: 0; border-top: 2px dashed var(--danger-ink); pointer-events: none; }
-.pain-limit span { position: absolute; right: 0; top: -20px; font-size: 0.75rem; font-weight: 700; color: var(--danger-ink); background: var(--surface); padding: 0 4px; }
-.pain-col { display: grid; grid-template-rows: 1fr auto; min-width: 0; }
-.pain-pair { display: flex; gap: 2px; align-items: flex-end; justify-content: center; height: 100%; }
-.pain-pair i, .pain-legend i { display: inline-block; width: 12px; border-radius: 3px 3px 0 0; }
-.pain-pair i { position: relative; min-height: 2px; }
-.pain-pair i b { position: absolute; left: 50%; bottom: 100%; transform: translateX(-50%); font-size: 0.6875rem; font-style: normal; line-height: 1.4; color: var(--ink-2); }
-.pain-pair .after b { color: var(--ink); }
-.pain-pair .before, .pain-legend .before { background: var(--line-strong); }
-.pain-pair .after, .pain-legend .after { background: var(--pine); }
-.pain-pair .after.high { background: var(--danger-ink); }
-.pain-day { font-size: 0.6875rem; color: var(--ink-3); text-align: center; }
-.pain-legend { display: flex; gap: 6px; align-items: center; margin: 0; }
-.pain-legend i { height: 10px; margin-left: 6px; }
 
 .now-card { gap: 8px; }
 .now-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }

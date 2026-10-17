@@ -144,6 +144,11 @@ async function refresh() {
       </div>
     </article>
 
+    <article v-if="v.pain?.length" class="card stack">
+      <h2 class="pain-h">{{ T("pain") }}</h2>
+      <PainChart :points="v.pain" :limit="v.painLimit" family />
+    </article>
+
     <NuxtLink :to="`/family/${patientId}/help`" class="link with-ic when-link"><PhoneCall class="ic" aria-hidden="true" /> {{ T("famWhenToCall") }}</NuxtLink>
 
     <UiSheet v-if="v.goal" :open="journeyOpen" :title="v.goal.text" @close="journeyOpen = false">
@@ -158,6 +163,7 @@ async function refresh() {
 </template>
 
 <style scoped>
+.pain-h { font-size: 1.125rem; }
 .remind-card { display: flex; gap: 12px; align-items: center; color: var(--ink); text-decoration: none; border: 1px solid var(--dawn); background: color-mix(in srgb, var(--dawn-soft) 55%, var(--surface)); }
 .fam-today { display: grid; gap: 14px; }
 .today-card { display: grid; gap: 10px; padding: 20px; }

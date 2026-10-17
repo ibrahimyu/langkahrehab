@@ -260,6 +260,9 @@ export type FamilyView = {
   /** Questions for the doctor from the patient and the family (not hidden ones), with answers. */
   questions: { id: string; at: string; text: string; fromFamily: boolean; memberId: string | null; reply: string; answered: boolean }[];
   letters: Omit<DischargeLetter, "image">[];
+  /** Pain before and after the last 14 sessions, and the doctor's limit (the same chart the patient sees). */
+  pain: { id: string; at: string; before: number | null; after: number | null }[];
+  painLimit: number;
 };
 
 export function weekFacts(p: Patient, now: number): WeekFacts {
@@ -309,6 +312,8 @@ export function familyView(p: Patient, now: number): FamilyView {
       .filter((n) => n.kind === "question" && !n.private)
       .map((n) => ({ id: n.id, at: n.at, text: n.quote, fromFamily: n.source === "family", memberId: n.familyMemberId ?? null, reply: n.reply, answered: !!(n.reply || n.answeredAt) })),
     letters: p.letters.map(({ image, ...l }) => l),
+    pain: p.sessions.slice(-14).map((s) => ({ id: s.id, at: s.at, before: s.painBefore, after: s.painAfter })),
+    painLimit: p.plan.painThreshold,
   };
 }
 
