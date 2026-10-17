@@ -21,6 +21,8 @@ export default defineNuxtConfig({
   nitro: {
     storage: { data: { driver: "fs", base: "./.data" } },
   },
+  // Testing on a phone needs https (camera, microphone): allow a Cloudflare quick tunnel to the dev server.
+  vite: { server: { allowedHosts: [".trycloudflare.com"] } },
   app: {
     head: {
       title: "Langkah · AI rehab coach",
