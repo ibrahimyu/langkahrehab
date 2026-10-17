@@ -59,10 +59,13 @@ const practising = ref(false);
 const gate = ref<{ ask: () => Promise<void> } | null>(null);
 const tracker = ref<{ start: () => Promise<void>; stop: () => void; reset: () => void } | null>(null);
 const reps = ref<RepScore[]>([]);
+const events = ref<RepEvent[]>([]);
+const analysis = ref(false);
 const last = computed(() => reps.value.at(-1) ?? null);
 const avg = computed(() => average(reps.value.map((r) => r.score)));
 async function startPractice() {
   reps.value = [];
+  events.value = [];
   practising.value = true;
   await nextTick();
   await tracker.value?.start();
@@ -73,6 +76,7 @@ function stopPractice() {
 }
 function onRep(e: RepEvent) {
   if (e.form) reps.value = [...reps.value, e.form];
+  events.value = [...events.value, { ...e }];
 }
 </script>
 
@@ -135,13 +139,25 @@ function onRep(e: RepEvent) {
           <p class="hint">{{ T("tutPracticeHint") }}</p>
           <p class="hint">{{ T(`camPlace_${exerciseId}` as TextKey) }}</p>
           <div v-if="practising" class="tut-cam">
-            <PoseTracker ref="tracker" :exercise-id="exerciseId" :limb="limbOf(patient.profile)" :hold-seconds="exercise.holdSeconds" :counting="true" model="lite" @rep="onRep" />
+            <PoseTracker ref="tracker" :exercise-id="exerciseId" :limb="limbOf(patient.profile)" :hold-seconds="exercise.holdSeconds" :counting="true" model="full" :analysis="analysis" @rep="onRep" />
             <div class="tut-score glass">
               <b class="tut-count">{{ reps.length }}</b>
               <span v-if="last">{{ T("formRep", { n: reps.length }) }} · <b>{{ last.score }}</b></span>
               <span v-if="last?.weakest">{{ T(`formTip_${last.weakest}` as TextKey) }}</span>
               <span v-else-if="last">{{ T(`formBand_${formBand(last.score)}` as TextKey) }}</span>
             </div>
+          </div>
+          <label class="check inline"><input v-model="analysis" type="checkbox" /> {{ T("labShow") }}</label>
+          <div v-if="analysis && events.length" class="lab-table-wrap">
+            <table class="lab-table">
+              <thead><tr><th>#</th><th>{{ T("labPeak") }}</th><th>{{ T("formPart_hold") }}</th><th>{{ T("labTime") }}</th><th>{{ T("formPart_range") }}</th><th>{{ T("formPart_pace") }}</th><th>{{ T("formSession") }}</th></tr></thead>
+              <tbody>
+                <tr v-for="e in events" :key="e.count">
+                  <td>{{ e.count }}</td><td>{{ e.peak }}°</td><td>{{ (e.heldMs / 1000).toFixed(1) }} s</td><td>{{ (e.durationMs / 1000).toFixed(1) }} s</td>
+                  <td>{{ Math.round((e.form?.range ?? 0) * 100) }}</td><td>{{ Math.round((e.form?.pace ?? 0) * 100) }}</td><td><b>{{ e.form?.score ?? "–" }}</b></td>
+                </tr>
+              </tbody>
+            </table>
           </div>
           <p v-if="avg !== null && !practising" class="tut-result">{{ T("formSession") }}: <b>{{ avg }}</b> · {{ T(`formBand_${formBand(avg)}` as TextKey) }}</p>
           <button v-if="!practising" class="ghost big-btn" @click="gate?.ask()"><Camera class="ic" aria-hidden="true" /> {{ T("tutPractice") }}</button>
@@ -185,5 +201,9 @@ function onRep(e: RepEvent) {
 .tut-score { position: absolute; left: 10px; right: 10px; bottom: 10px; display: grid; gap: 2px; padding: 10px 14px; border-radius: 14px; color: var(--on-night); }
 .tut-count { font: 700 2.25rem/1 var(--display); }
 .tut-result { margin: 0; font-size: 1.0625rem; }
+.lab-table-wrap { overflow-x: auto; }
+.lab-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; font-variant-numeric: tabular-nums; }
+.lab-table th, .lab-table td { padding: 6px 4px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.lab-table th:first-child, .lab-table td:first-child { text-align: left; }
 .tut-go { position: sticky; bottom: 12px; text-decoration: none; display: flex; justify-content: center; gap: 8px; align-items: center; }
 </style>

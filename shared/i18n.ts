@@ -315,6 +315,12 @@ const text = {
   "camPlace_side-lying-abduction": { en: "Put the phone at your feet, about 2 m away, so both hips and knees are in view.", id: "Taruh HP di arah kaki, sekitar 2 m, agar kedua pinggul dan lutut terlihat.", zh: "把手机放在脚的方向，约2米远，让双髋和双膝都在画面里。" },
   "camPlace_prone-hip-extension": { en: "Put the phone on the floor beside the exercising leg, about 2 m away.", id: "Taruh HP di lantai di samping kaki yang berlatih, sekitar 2 m.", zh: "把手机放在练习那条腿一侧的地上，约2米远。" },
   "camPlace_sit-to-stand": { en: "Put the phone at hip height beside the chair, about 2.5 m away.", id: "Taruh HP setinggi pinggul di samping kursi, sekitar 2,5 m.", zh: "把手机放在椅子侧面、与髋同高，约2.5米远。" },
+  "camPlace_arm-raise-forward": { en: "Put the phone at chest height beside you, about 2 m away, the exercising arm towards it.", id: "Taruh HP setinggi dada di samping Anda, sekitar 2 m, lengan yang berlatih menghadap HP.", zh: "把手机放在身体侧面、与胸同高，约2米远，练习的手臂朝向手机。" },
+  "camPlace_elbow-bend": { en: "Put the phone at chest height, about 1.5 m away, so your whole arm is in view.", id: "Taruh HP setinggi dada, sekitar 1,5 m, agar seluruh lengan terlihat.", zh: "把手机放在与胸同高处，约1.5米远，让整条手臂都在画面里。" },
+  labShow: { en: "Show the measurement", id: "Tampilkan pengukuran", zh: "显示测量数据" },
+  labThresholds: { en: "Top at {up}°, back at {down}°", id: "Atas di {up}°, kembali di {down}°", zh: "顶点{up}°，回到{down}°" },
+  labPeak: { en: "Peak", id: "Puncak", zh: "峰值" },
+  labTime: { en: "Time", id: "Waktu", zh: "用时" },
   // ---- Camera and form ----
   camLoading: { en: "Starting the camera…", id: "Menyalakan kamera…", zh: "正在打开摄像头…" },
   camNoPerson: { en: "Step into view so the camera can see you.", id: "Masuk ke dalam layar agar kamera bisa melihat Anda.", zh: "请进入画面，让摄像头看到您。" },

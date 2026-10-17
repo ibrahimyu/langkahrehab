@@ -10,6 +10,8 @@ const props = defineProps<{
   holdSeconds: number;
   counting: boolean;
   model: PoseModel;
+  /** Show the live angle and its last 10 seconds, for checking how the measurement behaves. */
+  analysis?: boolean;
 }>();
 const emit = defineEmits<{ rep: [e: RepEvent] }>();
 const T = useT();
@@ -46,9 +48,18 @@ defineExpose({ reset: tracker.reset, start: () => tracker.start(props.model), st
       <canvas ref="overlay" />
       <p v-if="framing" class="camera-hint" role="status">{{ framing }}</p>
     </div>
+    <div v-if="analysis && t" class="analysis">
+      <p class="analysis-now"><b>{{ tracker.value.value ?? "–" }}°</b> <span class="hint">{{ t.label }}</span></p>
+      <canvas ref="chart" class="analysis-chart" />
+      <p class="hint">{{ T("labThresholds", { up: t.up, down: t.down }) }} · {{ tracker.fps.value }} fps</p>
+    </div>
   </div>
 </template>
 
 <style scoped>
+.analysis { display: grid; gap: 6px; margin-top: 8px; }
+.analysis-now { margin: 0; display: flex; gap: 8px; align-items: baseline; }
+.analysis-now b { font: 700 1.5rem/1 var(--display); }
+.analysis-chart { width: 100%; height: 110px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
 .camera-hint { position: absolute; left: 12px; right: 12px; top: 50%; transform: translateY(-50%); margin: 0; padding: 12px 14px; border-radius: 14px; text-align: center; font-weight: 600; background: color-mix(in srgb, var(--night) 78%, transparent); color: var(--on-night); }
 </style>
