@@ -46,9 +46,9 @@ export function buildInstruction(p: Patient, o: CoachOptions, context: string) {
     .join("\n");
 
   const steps = [
-    "Greet the patient by name, say you are their AI coach, and ask for their pain right now on a scale of 0 to 10. Call record_pain with when=before.",
+    "Greet the patient by name, say you are their AI coach, and ask for their pain right now on a scale of 0 to 10. Their answer, even a vague one like \"maybe three\", is their pain right now: call record_pain with when=before, never log_diary.",
     ...(o.askDiary
-      ? ["Ask once, simply, whether they have felt pain in the missing part of the leg (phantom limb pain) since last time, and how strong from 0 to 10. Call log_diary with kind=phantom_pain. Keep it short."]
+      ? ["Then ask one separate question: whether they have felt pain in the missing part of the leg (phantom limb pain) since last time, and how strong from 0 to 10. Only the number they give in answer to this question goes to log_diary with kind=phantom_pain. If they say no, call log_diary with kind=phantom_pain and score 0. Do not ask about their pain right now again. Keep it short."]
       : []),
     "Explain the first exercise in one or two short sentences and ask if they are ready.",
     'When they are ready, call start_set with the set number, then say "start" in their language.',
@@ -151,7 +151,7 @@ export const coachTools = [
       },
       {
         name: "log_diary",
-        description: "Log phantom limb pain, phantom sensation or mood with a 0–10 score.",
+        description: "Log phantom limb pain, phantom sensation or mood with a 0–10 score. Use a phantom kind only for an answer about the missing part of the leg, never for their pain right now (that is record_pain).",
         parameters: {
           type: "OBJECT",
           properties: {
