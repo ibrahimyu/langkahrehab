@@ -3,6 +3,7 @@
 // call is answered with an error instead of corrupting the log.
 
 import type { Exercise } from "./exercises";
+import { average, type RepScore } from "./form";
 import { heardCount } from "./numbers";
 import { CONCERNS, type ConcernKind, type ConcernSource, type CountMode, type Difficulty, type SessionExercise } from "./model";
 
@@ -20,6 +21,8 @@ export type SetLog = {
   endedAt: number | null;
   /** Coach turns during the set that were not the end-of-set confirmation. */
   midSetTurns: number;
+  /** Camera form score of each counted rep. */
+  form: RepScore[];
 };
 
 export type SessionItem = { exercise: Exercise; sets: number; reps: number; log: SetLog[] };
@@ -42,7 +45,7 @@ export type Session = {
 export type ToolResponse = Record<string, unknown> & { ok: boolean };
 
 const newLog = (set: number): SetLog => ({
-  set, heardText: "", camera: null, logged: null, startedAt: null, endedAt: null, midSetTurns: 0,
+  set, heardText: "", camera: null, logged: null, startedAt: null, endedAt: null, midSetTurns: 0, form: [],
 });
 
 export function createSession(mode: CountMode, items: { exercise: Exercise; sets: number; reps: number }[]): Session {
@@ -130,7 +133,7 @@ export function applyTool(s: Session, name: string, args: Record<string, unknown
 
     case "report_concern": {
       const kind = CONCERNS.includes(args.kind as ConcernKind) ? (args.kind as ConcernKind) : "other";
-      const source: ConcernSource = args.source === "keyword_fallback" || args.source === "simulation" ? args.source : "coach";
+      const source: ConcernSource = args.source === "keyword_fallback" || args.source === "patient" ? args.source : "coach";
       s.concern = { kind, details: String(args.details ?? "").slice(0, 300), at: now, source };
       s.phase = "stopped";
       s.restUntil = null;
@@ -173,6 +176,7 @@ export function toRecordExercises(s: Session): SessionExercise[] {
     sets: i.sets,
     reps: i.reps,
     logged: i.log.map((l) => l.logged),
+    form: i.log.map((l) => average(l.form.map((r) => r.score))),
   }));
 }
 

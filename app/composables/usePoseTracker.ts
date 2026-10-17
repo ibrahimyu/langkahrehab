@@ -1,4 +1,5 @@
 import type { PoseLandmarker } from "@mediapipe/tasks-vision";
+import { scoreRep } from "#shared/form";
 import { RepCounter, missing as missingLandmarks, type Landmark, type RepEvent, type Tracking } from "#shared/pose";
 
 // Pinned to the installed package version so the WebAssembly files match the JavaScript.
@@ -34,6 +35,8 @@ export function usePoseTracker(els: {
   const atTop = ref(false);
   const fps = ref(0);
   const counting = ref(false);
+  /** Last time the movement changed direction or a rep was counted (performance.now()). */
+  const lastMove = ref(0);
 
   let landmarker: PoseLandmarker | undefined;
   let connections: { start: number; end: number }[] = [];
@@ -63,6 +66,7 @@ export function usePoseTracker(els: {
 
   function reset() {
     counter.reset();
+    lastMove.value = 0;
     count.value = 0;
     atTop.value = false;
   }
@@ -154,9 +158,13 @@ export function usePoseTracker(els: {
     while (history.length && now - history[0]!.t > HISTORY_MS) history.shift();
     if (counting.value) {
       const e = counter.push(smooth, now);
+      if (counter.atTop !== atTop.value || !lastMove.value) lastMove.value = now;
       atTop.value = counter.atTop;
       if (e) {
+        e.form = scoreRep(e, { up: counter.up, down: counter.down, holdMs: counter.holdMs });
+        if (!e.cue && e.form.weakest === "range") e.cue = "go_further";
         count.value = e.count;
+        lastMove.value = now;
         els.onRep?.(e);
       }
     }
@@ -222,5 +230,5 @@ export function usePoseTracker(els: {
 
   onBeforeUnmount(stop);
 
-  return { state, error, value, missing, person, count, atTop, fps, counting, start, stop, configure, setThresholds, reset };
+  return { state, error, value, missing, person, count, atTop, fps, counting, lastMove, start, stop, configure, setThresholds, reset };
 }

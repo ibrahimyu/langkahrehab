@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Camera, Hand, Mic, ShieldAlert } from "lucide-vue-next";
+import { sessionForm } from "#shared/form";
 import { locale, type TextKey } from "#shared/i18n";
 import type { CountMode, Patient, SessionRecord } from "#shared/model";
 
@@ -28,6 +29,7 @@ const sets = (s: SessionRecord) => `${s.exercises.reduce((n, e) => n + e.logged.
         </div>
         <dl class="cr-sess-nums">
           <div><dt>{{ T("sets") }}</dt><dd>{{ sets(s) }}</dd></div>
+          <div v-if="sessionForm(s.exercises) !== null"><dt>{{ T("formSession") }}</dt><dd>{{ sessionForm(s.exercises) }}/100</dd></div>
           <div :class="{ over: (s.painAfter ?? 0) >= patient.plan.painThreshold }"><dt>{{ T("painCol") }}</dt><dd>{{ s.painBefore ?? "–" }} → {{ s.painAfter ?? "–" }}</dd></div>
           <div><dt>{{ T("felt") }}</dt><dd>{{ s.difficulty ? T(`diff_${s.difficulty}` as TextKey) : "–" }}</dd></div>
         </dl>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Phone, Sparkles } from "lucide-vue-next";
 import { exerciseById } from "#shared/exercises";
+import { formBand, sessionForm } from "#shared/form";
 import type { TextKey } from "#shared/i18n";
 import type { Patient } from "#shared/model";
 
@@ -30,6 +31,7 @@ const diary = computed(() => (p.value?.diary ?? []).filter((d) => d.source === "
 const alerted = computed(() => (p.value?.alerts ?? []).some((a) => a.sessionId === props.sessionId));
 const distress = computed(() => s.value?.concern?.kind === "distress");
 const danger = computed(() => !!s.value && (s.value.nextAction.kind === "stop_contact" || s.value.nextAction.kind === "rest_contact"));
+const form = computed(() => (s.value ? sessionForm(s.value.exercises) : null));
 const setsDone = computed(() => {
   const ex = s.value?.exercises ?? [];
   return `${ex.reduce((n, e) => n + e.logged.filter((v) => v !== null).length, 0)}/${ex.reduce((n, e) => n + e.sets, 0)}`;
@@ -86,6 +88,14 @@ const setsDone = computed(() => {
       <div class="tile sky">
         <span class="tile-label">{{ T("sets") }}</span>
         <div class="tile-big">{{ setsDone }}</div>
+      </div>
+      <div class="tile wide">
+        <span class="tile-label">{{ T("formSession") }}</span>
+        <template v-if="form !== null">
+          <div class="tile-big">{{ form }}<span class="hint">/100</span></div>
+          <span>{{ T(`formBand_${formBand(form)}`) }}</span>
+        </template>
+        <span v-else class="hint">{{ T("formNone") }}</span>
       </div>
     </div>
     <slot />

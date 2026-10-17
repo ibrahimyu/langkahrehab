@@ -17,6 +17,7 @@ export default defineEventHandler(async (event) => {
     .map((e: any) => {
       const sets = Math.min(5, Math.max(1, Math.round(Number(e.sets) || 1)));
       const logged = Array.isArray(e.logged) ? e.logged : [];
+      const form = Array.isArray(e.form) ? e.form : [];
       return {
         exerciseId: e.exerciseId,
         sets,
@@ -24,6 +25,10 @@ export default defineEventHandler(async (event) => {
         logged: Array.from({ length: sets }, (_, i) => {
           const n = Number(logged[i]);
           return logged[i] === null || logged[i] === undefined || !Number.isInteger(n) ? null : Math.min(100, Math.max(0, n));
+        }),
+        form: Array.from({ length: sets }, (_, i) => {
+          const n = Number(form[i]);
+          return form[i] === null || form[i] === undefined || !Number.isFinite(n) ? null : Math.min(100, Math.max(0, Math.round(n)));
         }),
       };
     });
@@ -40,7 +45,7 @@ export default defineEventHandler(async (event) => {
     painAfter: score(b.painAfter),
     difficulty: (["easy", "ok", "hard"] as const).includes(b.difficulty) ? b.difficulty : null,
     concern: b.concern && typeof b.concern === "object"
-      ? { kind: pick(b.concern.kind, CONCERNS, "other"), details: str(b.concern.details, 300), source: pick(b.concern.source, ["coach", "keyword_fallback", "simulation"] as const, "coach") }
+      ? { kind: pick(b.concern.kind, CONCERNS, "other"), details: str(b.concern.details, 300), source: pick(b.concern.source, ["coach", "keyword_fallback", "patient"] as const, "coach") }
       : null,
     nextAction: { kind: "keep_going" },
     source: "session",

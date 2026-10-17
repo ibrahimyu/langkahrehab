@@ -1,6 +1,6 @@
 // The shared data model: the contract between the patient flow and the care team side.
 // Firestore: workspaces/{workspaceId} (Workspace) and workspaces/{workspaceId}/patients/{patientId} (Patient).
-// A workspace is one demo copy: each visitor (Firebase anonymous user) gets their own seeded patients.
+// A workspace is one copy of the data: each visitor (Firebase anonymous user) gets their own seeded patients.
 // See docs/data-model.md.
 
 import { LANGS, type Lang } from "./exercises";
@@ -23,8 +23,8 @@ export const SKIN_SIGNS = [
   "redness", "swelling", "open_wound", "blister", "scab", "dark_discoloration", "drainage", "rash", "other",
 ] as const;
 export const CONCERNS = ["wound", "infection", "fall", "chest_pain", "breathing", "dizziness", "severe_pain", "distress", "other"] as const;
-/** Who stopped the session: the coach (tool call), the app's own phrase check (SYS-01), or a simulation. */
-export type ConcernSource = "coach" | "keyword_fallback" | "simulation";
+/** Who stopped the session: the coach (tool call), the app's own phrase check (SYS-01), the patient's own button, or an older simulated session. */
+export type ConcernSource = "coach" | "keyword_fallback" | "patient" | "simulation";
 
 export type Source = (typeof SOURCES)[number];
 export type MemoryKind = (typeof MEMORY_KINDS)[number];
@@ -38,9 +38,9 @@ export type Workspace = {
   createdAt: string;
   /** Days added by the demo "next day" button. All dates use `now(workspace)`. */
   offsetDays: number;
-  /** SYS-03: demo date (YYYY-MM-DD) of the last daily cycle, so running it twice adds nothing. */
+  /** SYS-03: date (YYYY-MM-DD) of the last daily cycle, so running it twice adds nothing. */
   lastDailyCycle?: string | null;
-  /** AI-06: morning triage sentences, cached per role per demo date. */
+  /** AI-06: morning triage sentences, cached per role per date. */
   triage?: Partial<Record<CareRole, TriageCache>>;
 };
 /** AI-06 cache: one sentence per patient, in the order the rules set. */
@@ -111,6 +111,8 @@ export type SessionExercise = {
   reps: number;
   /** Reps per set as logged (camera count in camera mode); null = set not done. */
   logged: (number | null)[];
+  /** Average camera form score (0–100) per set; null where the camera did not score. */
+  form?: (number | null)[];
 };
 
 export type SessionRecord = {
@@ -397,7 +399,7 @@ export const DEFAULT_TZ = "Asia/Jakarta";
 export const isoDate = (d: Date, tz = DEFAULT_TZ) => new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
 export const DAY = 86_400_000;
 
-/** The demo clock: real time plus the days added with "next day". */
+/** The clock for a workspace: real time plus any offset kept from older data. */
 export const nowFor = (w: Workspace | null) => Date.now() + (w?.offsetDays ?? 0) * DAY;
 
 export const limbOf = (p: Profile): PoseLimb => ({ level: p.level, side: p.side });

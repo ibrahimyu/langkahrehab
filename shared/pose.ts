@@ -1,6 +1,8 @@
 // Rep counting from MediaPipe pose landmarks: one movement signal per exercise (an angle in
 // degrees), counted with two thresholds so jitter around one value cannot double-count.
 
+import type { RepScore } from "./form";
+
 export type Landmark = { x: number; y: number; z?: number; visibility?: number };
 export type Side = "left" | "right";
 /** "none" is for testers without an amputation: `side` is then the leg that does the exercise. */
@@ -113,8 +115,8 @@ export function missing(t: Tracking, lm: Landmark[]) {
     .map(([side, joint]) => `${side} ${joint}`);
 }
 
-export type Cue = "hold_longer" | "slow_down";
-export type RepEvent = { count: number; heldMs: number; durationMs: number; peak: number; cue: Cue | null };
+export type Cue = "hold_longer" | "slow_down" | "go_further";
+export type RepEvent = { count: number; heldMs: number; durationMs: number; peak: number; cue: Cue | null; form?: RepScore };
 
 /** Counts a rep when the signal goes above `up` and comes back below `down`. */
 export class RepCounter {
