@@ -1,7 +1,7 @@
 // System instruction and tools for the voice coach. Built on the server from the stored patient
 // and locked into the one-use Live token, so the browser cannot change what the coach is told.
 
-import { exerciseById, type Exercise, type Lang } from "./exercises";
+import { exerciseById, howTo, type Exercise, type Lang } from "./exercises";
 import { CONCERNS, DIARY_KINDS, MEMORY_KINDS, describeProfile, type CountMode, type Patient } from "./model";
 
 export type CoachOptions = {
@@ -28,8 +28,8 @@ const counting: Record<CountMode, string> = {
     "You count the tempo for the patient. For each rep say the exercise's movement words, counting the hold if it has one, then the rep number, at a calm pace. Count exactly the target reps without stopping to chat. If the patient says they cannot continue, stop counting. Then call log_set with the number of reps completed.",
 };
 
-const describeItem = (e: Exercise, sets: number, reps: number, lang: Lang, i: number) =>
-  `${i + 1}. ${e.name[lang]} (${e.name.en}): ${sets} sets of ${reps} reps${e.holdSeconds ? `, hold ${e.holdSeconds} seconds each rep` : ""}, rest ${e.restSeconds} seconds. How: ${e.instructions[lang]} Movement words: "${e.tempo[lang]}".`;
+const describeItem = (e: Exercise, sets: number, reps: number, lang: Lang, i: number, p: Patient) =>
+  `${i + 1}. ${e.name[lang]} (${e.name.en}): ${sets} sets of ${reps} reps${e.holdSeconds ? `, hold ${e.holdSeconds} seconds each rep` : ""}, rest ${e.restSeconds} seconds. How: ${howTo(e, lang, p.profile)} Movement words: "${e.tempo[lang]}".`;
 
 /** `context` is what the coach remembers (`coachContext`). */
 export function buildInstruction(p: Patient, o: CoachOptions, context: string) {
@@ -37,7 +37,7 @@ export function buildInstruction(p: Patient, o: CoachOptions, context: string) {
   const items = p.plan.items
     .map((it, i) => {
       const e = exerciseById(it.exerciseId);
-      return e ? describeItem(e, it.sets, it.reps, lang, i) : null;
+      return e ? describeItem(e, it.sets, it.reps, lang, i, p) : null;
     })
     .filter(Boolean)
     .join("\n");

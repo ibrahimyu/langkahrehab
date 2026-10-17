@@ -4,7 +4,7 @@
 
 import type { Exercise } from "./exercises";
 import { heardCount } from "./numbers";
-import { CONCERNS, type ConcernKind, type CountMode, type Difficulty, type SessionExercise } from "./model";
+import { CONCERNS, type ConcernKind, type ConcernSource, type CountMode, type Difficulty, type SessionExercise } from "./model";
 
 export type Phase = "intro" | "ready" | "set" | "rest" | "after" | "done" | "stopped";
 
@@ -35,7 +35,7 @@ export type Session = {
   painBefore: number | null;
   painAfter: number | null;
   difficulty: Difficulty | null;
-  concern: { kind: ConcernKind; details: string; at: number } | null;
+  concern: { kind: ConcernKind; details: string; at: number; source: ConcernSource } | null;
   restUntil: number | null;
 };
 
@@ -130,9 +130,15 @@ export function applyTool(s: Session, name: string, args: Record<string, unknown
 
     case "report_concern": {
       const kind = CONCERNS.includes(args.kind as ConcernKind) ? (args.kind as ConcernKind) : "other";
-      s.concern = { kind, details: String(args.details ?? "").slice(0, 300), at: now };
+      const source: ConcernSource = args.source === "keyword_fallback" || args.source === "simulation" ? args.source : "coach";
+      s.concern = { kind, details: String(args.details ?? "").slice(0, 300), at: now, source };
       s.phase = "stopped";
       s.restUntil = null;
+      if (kind === "distress")
+        return {
+          ok: true,
+          next: "The session is stopped. Speak slowly and gently. Say you are glad they told you and that they are not alone. Encourage them to talk to someone they trust now, and to call emergency services (112) if they might hurt themselves. Their care team has been told. Do not continue the exercise, do not give advice, and do not end the conversation abruptly.",
+        };
       return {
         ok: true,
         next: "The session is stopped. Tell the patient to stop exercising and rest, and to contact their clinic today, or emergency services if it is an emergency. The care team has been alerted. Do not continue the exercise.",
