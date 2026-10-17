@@ -1,5 +1,6 @@
 import type { H3Event } from "h3";
 import { getAuth } from "firebase-admin/auth";
+import { seedAccounts } from "#shared/accounts";
 import { seedCases } from "#shared/cases";
 import { isoDate, nowFor, type Patient, type Workspace } from "#shared/model";
 
@@ -24,7 +25,7 @@ export async function workspaceId(event: H3Event): Promise<string> {
 
 /** Creates the copy with the prepared cases on first use. */
 export async function seed(ws: string) {
-  const w: Workspace = { createdAt: new Date().toISOString(), offsetDays: 0 };
+  const w: Workspace = { createdAt: new Date().toISOString(), offsetDays: 0, accounts: seedAccounts() };
   await resetWorkspace(ws, w, seedCases(Date.now()));
   return w;
 }
@@ -39,6 +40,10 @@ export async function context(event: H3Event) {
     // SYS-02: every new copy writes seed data; limit how many one visitor can create (production store only).
     if (useRuntimeConfig().storage === "firestore") rateLimit(event, "", "ws-new", 10, 3_600_000);
     workspace = await seed(ws);
+  }
+  if (!workspace.accounts) {
+    workspace = { ...workspace, accounts: seedAccounts() };
+    await setWorkspace(ws, workspace);
   }
   const now = nowFor(workspace);
   if (workspace.lastDailyCycle !== isoDate(new Date(now))) {

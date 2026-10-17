@@ -1,3 +1,4 @@
+import { looksAfter } from "#shared/accounts";
 import { pickLang, summarize, type CareRole, type TriageAction, type TriageCache } from "#shared/model";
 import { careSignals, triage, type TriageReason } from "#shared/triage";
 
@@ -30,7 +31,7 @@ export default defineEventHandler(async (event) => {
   const fresh = getQuery(event).refresh === "1";
   const { ws, workspace, now } = await context(event);
   const date = new Date(now).toISOString().slice(0, 10);
-  const patients = await listPatients(ws);
+  const patients = (await listPatients(ws)).filter((p) => looksAfter(actor.accountId, actor.role, p));
   const rows = patients.map((p) => ({ ...summarize(p), ...careSignals(p, now) }));
   const list = triage(rows, role, now);
   // Same day, language and the same reasons → the cached sentences still fit.

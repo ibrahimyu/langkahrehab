@@ -34,6 +34,12 @@ test("only the patient talks with Langkah", () => {
   assert.equal(can("patient", "talk.use"), true);
   for (const r of ["family", "physio", "doctor"] as const) assert.equal(can(r, "talk.use"), false);
   assert.equal(can("family", "familyTalk.use"), true);
+  assert.equal(can("admin", "account.manage"), true);
+  for (const r of ["patient", "family", "physio", "doctor"] as const) assert.equal(can(r, "account.manage"), false);
+  assert.equal(can("doctor", "patient.create"), true);
+  assert.equal(can("physio", "patient.create"), false);
+  // The admin runs the office, not the treatment.
+  for (const a of ["plan.exercises", "plan.limits", "session.save"] as const) assert.equal(can("admin", a), false);
   for (const r of ["patient", "physio", "doctor"] as const) assert.equal(can(r, "familyTalk.use"), false);
 });
 

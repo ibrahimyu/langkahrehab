@@ -3,11 +3,12 @@
 // A workspace is one copy of the data: each visitor (Firebase anonymous user) gets their own seeded patients.
 // See docs/data-model.md.
 
+import type { Account } from "./accounts";
 import { LANGS, type Lang } from "./exercises";
 import type { Level, Limb as PoseLimb, Side } from "./pose";
 import { elbowLost, legacyFields, limbEnglish, limbsOf, sanitizeLimbs, type Limb } from "./limbs";
 
-export const ROLES = ["patient", "family", "physio", "doctor"] as const;
+export const ROLES = ["patient", "family", "physio", "doctor", "admin"] as const;
 export type Role = (typeof ROLES)[number];
 /** The clinicians. Family is not part of the care team. */
 export type CareRole = "physio" | "doctor";
@@ -42,6 +43,8 @@ export type Workspace = {
   lastDailyCycle?: string | null;
   /** AI-06: morning triage sentences, cached per role per date. */
   triage?: Partial<Record<CareRole, TriageCache>>;
+  /** People who can sign in to this workspace (seeded on first use, managed by the admin). */
+  accounts?: Account[];
 };
 /** AI-06 cache: one sentence per patient, in the order the rules set. */
 export type TriageCache = { date: string; key?: string; by: "ai" | "template"; items: { patientId: string; reason: string; action: TriageAction; lang: Lang }[] };
@@ -312,6 +315,8 @@ export type Patient = {
   family: FamilyMember[];
   familyTasks: FamilyTask[];
   dismissedTasks?: DismissedTask[];
+  /** The physio and doctor (account ids) looking after this patient; null = any clinician. */
+  careTeam?: { physioId: string | null; doctorId: string | null };
   familyUpdate: FamilyUpdate | null;
   letters: DischargeLetter[];
   /** FIS-06: progression proposals, newest last (max 20). At most one is pending. */

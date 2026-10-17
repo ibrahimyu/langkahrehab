@@ -2,7 +2,7 @@ import type { H3Event } from "h3";
 import { ROLES, type Role } from "#shared/model";
 import { can, type Action } from "#shared/permissions";
 
-export type Actor = { role: Role };
+export type Actor = { role: Role; accountId: string | null };
 
 /**
  * The role a request acts as. In the demo one visitor holds every role and a guided scenario shows
@@ -13,7 +13,8 @@ export type Actor = { role: Role };
 export function actorFrom(event: H3Event): Actor {
   const raw = getHeader(event, "x-langkah-role") ?? "patient";
   if (!(ROLES as readonly string[]).includes(raw)) throw createError({ statusCode: 400, statusMessage: "Unknown role." });
-  return { role: raw as Role };
+  const account = getHeader(event, "x-langkah-account");
+  return { role: raw as Role, accountId: account && /^[\w-]{1,64}$/.test(account) ? account : null };
 }
 
 /** Throws 403 unless the actor may perform the action (shared/permissions.ts). */

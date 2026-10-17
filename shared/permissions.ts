@@ -27,6 +27,8 @@ export const ACTIONS = [
   "prefs.edit",
   "talk.use",
   "familyTalk.use",
+  "account.manage",
+  "patient.create",
   "family.edit",
   "familyTask.do",
   "familyTask.edit",
@@ -72,6 +74,9 @@ const matrix: Record<Action, Role[]> = {
   "talk.use": ["patient"],
   // The family's own companion: a space for the caregiver, never read by the patient or the clinic.
   "familyTalk.use": ["family"],
+  // Admin (clinic office): people, sign-in accounts and who looks after whom. No clinical changes.
+  "account.manage": ["admin"],
+  "patient.create": ["admin", "doctor"],
   // Family (KEL): the patient, the family and the physio may keep the family list up to date.
   "family.edit": ["patient", "family", "physio"],
   "familyTask.do": ["family"],

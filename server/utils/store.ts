@@ -108,6 +108,12 @@ export async function deleteIntake(ws: string, id: string) {
 }
 
 /** DOK-01 Confirm: the new patient and the confirmed intake in one write. */
+/** Adds a new patient (admin or doctor, without a letter). */
+export async function createPatient(ws: string, patient: Patient) {
+  if (useFirestore()) return void (await patientsCol(ws).doc(patient.id).set(patient));
+  await local().setItem(`ws:${ws}:p:${patient.id}`, patient);
+}
+
 export async function createPatientFromIntake(ws: string, patient: Patient, intake: Intake) {
   if (useFirestore()) {
     const batch = firestore().batch();
