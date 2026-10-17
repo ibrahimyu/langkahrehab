@@ -665,6 +665,7 @@ const text = {
   },
   next_rest_contact: { en: "Rest today and contact your clinic.", id: "Istirahat hari ini dan hubungi klinik Anda.", zh: "今天请休息，并联系您的诊所。" },
   next_checkin_suggested: { en: "Your pain has been going up. It's a good idea to ask for a check-up.", id: "Nyeri Anda naik beberapa hari ini. Sebaiknya minta kontrol.", zh: "这几天您的疼痛在增加，建议申请复查。" },
+  next_review_on: { en: "Your next check-up is on {date}.", id: "Kontrol berikutnya hari {date}.", zh: "下次复诊在{date}。" },
   next_review_due: { en: "It's time for your check-up with your doctor.", id: "Waktunya kontrol dengan dokter Anda.", zh: "该去医生那里复查了。" },
   missedNudge: { en: "Welcome back, {name}. Let's start gently today.", id: "Selamat datang kembali, {name}. Kita mulai pelan-pelan hari ini.", zh: "欢迎回来，{name}。今天我们慢慢开始。" },
 

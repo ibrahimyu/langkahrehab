@@ -65,12 +65,21 @@ export function afterSession(p: Patient, s: SessionRecord, now: number): { nextA
     upgrade({ kind: "checkin_suggested" });
   }
 
-  if (isoDate(new Date(now)) >= p.plan.reviewDate) {
-    alerts.push(makeAlert("review_due", "low", { key: "alert_review_due", params: { date: p.plan.reviewDate } }, ["doctor", "physio"], at));
+  if (isoDate(new Date(now)) >= reviewDay(p)) {
+    alerts.push(makeAlert("review_due", "low", { key: "alert_review_due", params: { date: reviewDay(p) } }, ["doctor", "physio"], at));
     upgrade({ kind: "review_due" });
   }
 
   return { nextAction: next, alerts };
+}
+
+/** The day the doctor's review is due: the booked visit when there is one, else the plan's review date. */
+export function reviewDay(p: Pick<Patient, "checkIns" | "plan">): string {
+  const booked = p.checkIns
+    .filter((c) => c.kind === "doctor_review" && c.status === "scheduled" && c.scheduledFor)
+    .map((c) => c.scheduledFor!)
+    .sort()[0];
+  return booked ?? p.plan.reviewDate;
 }
 
 /** Daily checks, run once per day by the navigator cycle. */
@@ -80,7 +89,7 @@ export function daily(p: Patient, now: number): Alert[] {
   const last = Date.parse(p.sessions.at(-1)?.at ?? p.plan.updatedAt);
   const days = Math.floor((now - last) / DAY);
   if (days >= MISSED_DAYS) alerts.push(makeAlert("missed_sessions", "low", { key: "alert_missed", params: { n: days } }, ["physio"], at));
-  if (isoDate(new Date(now)) >= p.plan.reviewDate) alerts.push(makeAlert("review_due", "low", { key: "alert_review_due", params: { date: p.plan.reviewDate } }, ["doctor", "physio"], at));
+  if (isoDate(new Date(now)) >= reviewDay(p)) alerts.push(makeAlert("review_due", "low", { key: "alert_review_due", params: { date: reviewDay(p) } }, ["doctor", "physio"], at));
   return alerts;
 }
 

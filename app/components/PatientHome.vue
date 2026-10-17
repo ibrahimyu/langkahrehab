@@ -4,7 +4,7 @@ import { exerciseById } from "#shared/exercises";
 import { limbLine, limbsOf } from "#shared/limbs";
 import { ago, locale, profileText, stories, type TextKey } from "#shared/i18n";
 import { DAY, type Patient } from "#shared/model";
-import { daysSinceSession, weekAdherence } from "#shared/rules";
+import { daysSinceSession, reviewDay, weekAdherence } from "#shared/rules";
 import { nextTarget } from "#shared/goals";
 import { planMinutes, repsSinceLastWeek, streakDays } from "#shared/home";
 import { dayKey } from "#shared/calendar";
@@ -39,6 +39,11 @@ const advice = computed(() => {
   const s = last.value;
   // Advice is for the day of the session; after that the plan (or a check-up) takes over.
   if (!s || s.nextAction.kind === "keep_going" || now.value - Date.parse(s.at) > DAY) return null;
+  // A check-up booked for a later day is shown with its date, not as "time for your check-up".
+  if (s.nextAction.kind === "review_due") {
+    const day = reviewDay(p.value!);
+    if (day > dayKey(now.value)) return { text: T("next_review_on", { date: fmt(day, { weekday: "long", day: "numeric", month: "long" }) }), danger: false };
+  }
   return { text: T(`next_${s.nextAction.kind}` as TextKey), danger: s.nextAction.kind === "stop_contact" || s.nextAction.kind === "rest_contact" };
 });
 const sinceLast = computed(() => (p.value ? daysSinceSession(p.value, now.value) : null));
