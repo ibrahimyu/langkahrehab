@@ -3,7 +3,9 @@
 // The image itself is never part of an Intake.
 
 import type { Lang } from "./exercises";
-import { generateFamilyTasks, sanitizeMember } from "./family";
+import { generateFamilyTasks, loadsBody, sanitizeMember } from "./family";
+import { LOWER_LEVELS, UPPER_LEVELS, legacyFields, limbsOf, type LimbLevel } from "./limbs";
+import { firstPlan } from "./patients";
 import {
   CAUSES,
   DAY,
@@ -15,6 +17,7 @@ import {
   type ActivityEvent,
   type CheckIn,
   type FamilyMember,
+  type FamilyTask,
   type Patient,
   type Plan,
   type PlanItem,
@@ -30,12 +33,16 @@ export type IntakeField = (typeof INTAKE_FIELDS)[number];
 export const REQUIRED_FIELDS: IntakeField[] = ["patientName", "age", "amputationSide", "amputationLevel"];
 export const SEXES = ["female", "male"] as const;
 export const SIDES = ["left", "right"] as const;
-export const INTAKE_LEVELS = ["below_knee", "above_knee", "other"] as const;
+/** Every leg and arm level (shared/limbs.ts), or "other" when the letter says something else. */
+export const INTAKE_LEVELS = [...LOWER_LEVELS, ...UPPER_LEVELS, "other"] as const;
 /** Below this the review screen asks the doctor to check the field. */
 export const CONFIDENT = 0.7;
 
 export type FieldValue = { value: string | number | null; confidence: number; edited: boolean };
 export type IntakeFamily = Pick<FamilyMember, "name" | "relation" | "livesWithPatient">;
+/** A job for the family suggested from the letter's home advice; the doctor ticks the ones to send. */
+export type SuggestedTask = { title: string; detail: string; item: boolean; selected: boolean };
+
 export type Intake = {
   id: string;
   createdAt: string;
@@ -44,6 +51,8 @@ export type Intake = {
   fields: Record<IntakeField, FieldValue>;
   /** Copied from the letter for the team to read. Never used by Langkah, never sent to the coach. */
   medicationsMentioned: string[];
+  /** From the letter's advice for home (wound care, papers, visits); never medicine, standing or walking. */
+  suggestedTasks?: SuggestedTask[];
   family: IntakeFamily[];
   lang: Lang;
   /** Set for a letter the family sent for an existing patient (DOK-07). */
@@ -51,7 +60,7 @@ export type Intake = {
   letterId: string | null;
   /** "ai" = read by Gemini, "sample" = stored output for a demo letter, "manual" = AI unavailable. */
   readBy: "ai" | "sample" | "manual";
-  sample: "id" | "en" | null;
+  sample: string | null;
   confirmedAt: string | null;
   updatedAt: string;
 };
@@ -81,7 +90,14 @@ export function cleanValue(field: IntakeField, v: unknown): string | number | nu
 }
 
 /** The model's answer made safe (AI-03): clamp confidence, enums and dates checked, null = confidence 0. */
-export function sanitizeExtraction(raw: any): { fields: Record<IntakeField, FieldValue>; medicationsMentioned: string[] } {
+export function sanitizeTasks(raw: unknown): SuggestedTask[] {
+  return (Array.isArray(raw) ? raw : [])
+    .map((x: any) => ({ title: str(x?.title, 120), detail: str(x?.detail, 400), item: !!x?.item, selected: x?.selected === undefined ? true : !!x.selected }))
+    .filter((x) => x.title && !loadsBody(`${x.title} ${x.detail}`) && !/\b(obat|minum|dosis|medicine|tablet|mg)\b/i.test(`${x.title} ${x.detail}`))
+    .slice(0, 6);
+}
+
+export function sanitizeExtraction(raw: any): { fields: Record<IntakeField, FieldValue>; medicationsMentioned: string[]; suggestedTasks: SuggestedTask[] } {
   const fields = {} as Record<IntakeField, FieldValue>;
   for (const f of INTAKE_FIELDS) {
     const value = cleanValue(f, raw?.[f]?.value);
@@ -89,7 +105,7 @@ export function sanitizeExtraction(raw: any): { fields: Record<IntakeField, Fiel
   }
   const meds = raw?.medicationsMentioned?.value ?? raw?.medicationsMentioned;
   const medicationsMentioned = (Array.isArray(meds) ? meds : []).map((m: unknown) => str(m, 120)).filter(Boolean).slice(0, 20);
-  return { fields, medicationsMentioned };
+  return { fields, medicationsMentioned, suggestedTasks: sanitizeTasks(raw?.familyTasks) };
 }
 
 export const emptyFields = (): Record<IntakeField, FieldValue> =>
@@ -135,9 +151,13 @@ export function planTemplate(level: "below_knee" | "above_knee"): PlanItem[] {
 const v = <T>(fields: Record<IntakeField, FieldValue>, f: IntakeField) => fields[f].value as T | null;
 
 function profileFrom(fields: Record<IntakeField, FieldValue>, base?: Profile): Profile {
+  const level = v<string>(fields, "amputationLevel");
+  const side = v<"left" | "right">(fields, "amputationSide") ?? base?.side ?? "left";
+  const site = (UPPER_LEVELS as readonly string[]).includes(level ?? "") ? "upper" : "lower";
+  const limbs = level && level !== "other" ? [{ site, side, level: level as LimbLevel } as const] : base ? limbsOf(base) : [{ site: "lower", side, level: "below_knee" } as const];
   return {
-    level: v<string>(fields, "amputationLevel") === "above_knee" ? "above_knee" : "below_knee",
-    side: v<"left" | "right">(fields, "amputationSide") ?? base?.side ?? "left",
+    limbs: [...limbs],
+    ...legacyFields([...limbs], side),
     stage: base?.stage ?? "pre_prosthetic",
     cause: v<Profile["cause"]>(fields, "cause") ?? base?.cause ?? "unknown",
     restrictions: v<string>(fields, "restrictions") ?? base?.restrictions ?? "",
@@ -161,6 +181,16 @@ function intakeEvent(p: Patient, iso: string, r: Omit<IntakeResult, "patientId" 
   p.activity = [...(p.activity ?? []), event].slice(-200);
 }
 
+/** The suggestions the doctor kept, as family tasks anyone in the family can take. */
+function letterTasks(intake: Intake, iso: string): FamilyTask[] {
+  return (intake.suggestedTasks ?? [])
+    .filter((x) => x.selected)
+    .map((x) => ({
+      id: newId(), templateId: null, title: x.title, detail: x.detail, assigneeId: null, category: x.item ? "equipment" : "admin",
+      cost: "free", dueDate: null, status: "open", source: "care_team", createdAt: iso, doneAt: null, doneBy: null,
+    }));
+}
+
 /** DOK-01 Confirm for a new patient: profile, plan v1 (awaiting physio), readiness, family + tasks, visit. */
 export function patientFromIntake(intake: Intake, now: number): { patient: Patient; result: IntakeResult } {
   const iso = new Date(now).toISOString();
@@ -168,7 +198,7 @@ export function patientFromIntake(intake: Intake, now: number): { patient: Patie
   const profile = profileFrom(f);
   const reviewDate = v<string>(f, "nextVisitDate") ?? isoDate(new Date(now + 14 * DAY));
   const plan: Plan = {
-    version: 1, items: planTemplate(profile.level === "above_knee" ? "above_knee" : "below_knee"), note: "", painThreshold: 7, reviewDate,
+    version: 1, items: firstPlan(limbsOf(profile)), note: "", painThreshold: 7, reviewDate,
     maxSets: null, maxReps: null, source: "intake", awaitingPhysio: true, updatedAt: iso, updatedBy: "doctor",
   };
   const family: FamilyMember[] = intake.family.map((m) => ({ id: newId(), ...m, lang: intake.lang, phone: null }));
@@ -190,7 +220,7 @@ export function patientFromIntake(intake: Intake, now: number): { patient: Patie
     readiness: emptyReadiness(), readinessLog: [], clearedForFittingAt: null, goalReachedAt: null,
     createdAt: iso,
   };
-  patient.familyTasks = generateFamilyTasks(patient, now);
+  patient.familyTasks = [...generateFamilyTasks(patient, now), ...letterTasks(intake, iso)];
   const result = { patientId: patient.id, planVersion: 1, tasks: patient.familyTasks.length, family: family.length, checkIn: patient.checkIns[0]?.scheduledFor ?? null, isNew: true };
   intakeEvent(patient, iso, result);
   return { patient, result };
@@ -215,7 +245,7 @@ export function applyIntake(p: Patient, intake: Intake, now: number): IntakeResu
   const known = new Set(p.family.map((m) => m.name.toLowerCase()));
   const added = intake.family.filter((m) => !known.has(m.name.toLowerCase())).map((m) => ({ id: newId(), ...m, lang: intake.lang, phone: null }));
   p.family = [...p.family, ...added].slice(0, 6);
-  const tasks = generateFamilyTasks(p, now);
+  const tasks = [...generateFamilyTasks(p, now), ...letterTasks(intake, iso)];
   p.familyTasks = [...p.familyTasks, ...tasks];
   // The doctor has seen the letter: the photo is dropped, only the reviewed fields stay (DAT-10).
   p.letters = p.letters.map((l) => (l.id === intake.letterId ? { ...l, status: "reviewed" as const, image: "" } : l));

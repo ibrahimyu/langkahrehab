@@ -20,7 +20,7 @@ export default defineEventHandler(async (event) => {
   let image = typeof b.image === "string" ? b.image : "";
   let patientId: string | null = null;
   let letterId: string | null = null;
-  let lang = pickLang(sample?.id ?? b.lang);
+  let lang = pickLang(sample?.lang ?? b.lang);
   if (typeof b.letterId === "string" && typeof b.patientId === "string") {
     const p = await getPatient(ws, b.patientId);
     const letter = p?.letters.find((l) => l.id === b.letterId);
@@ -37,7 +37,7 @@ export default defineEventHandler(async (event) => {
   if (!match || image.length > MAX_CHARS) throw bad("Choose a JPEG or PNG photo under 4 MB.");
   rateLimit(event, ws, "intake", 10, 3_600_000);
 
-  let read: Pick<Intake, "fields" | "medicationsMentioned" | "readBy">;
+  let read: Pick<Intake, "fields" | "medicationsMentioned" | "suggestedTasks" | "readBy">;
   try {
     await aiBudget(event, "intake");
     const response = await gemini().models.generateContent({
@@ -56,8 +56,8 @@ export default defineEventHandler(async (event) => {
     // Never log the request: it carries the photo (AI-03 privacy).
     console.error("Intake read failed:", e?.statusCode ?? "", String(e?.statusMessage ?? e?.message ?? "").replace(/\s+/g, " ").slice(0, 120));
     read = sample
-      ? { fields: sampleFields(sample), medicationsMentioned: [...sample.medications], readBy: "sample" }
-      : { fields: emptyFields(), medicationsMentioned: [], readBy: "manual" };
+      ? { fields: sampleFields(sample), medicationsMentioned: [...sample.medications], suggestedTasks: [], readBy: "sample" }
+      : { fields: emptyFields(), medicationsMentioned: [], suggestedTasks: [], readBy: "manual" };
   }
 
   const intake: Intake = {

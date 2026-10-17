@@ -1,4 +1,4 @@
-import { applyEdits, sanitizeFamily } from "#shared/intake";
+import { applyEdits, sanitizeFamily, sanitizeTasks } from "#shared/intake";
 
 // The doctor's corrections, saved as a draft (nothing reaches a patient before Confirm).
 export default defineEventHandler(async (event) => {
@@ -10,6 +10,7 @@ export default defineEventHandler(async (event) => {
   const b = (await readBody(event)) ?? {};
   intake.fields = applyEdits(intake.fields, b.values);
   if (b.family !== undefined) intake.family = sanitizeFamily(b.family, intake.lang);
+  if (b.tasks !== undefined) intake.suggestedTasks = sanitizeTasks(b.tasks);
   intake.updatedAt = new Date(now).toISOString();
   await saveIntake(ws, intake);
   return { intake };

@@ -1,15 +1,17 @@
-// Two synthetic discharge letters for the demo (DOK-01, MED-04). Fictional patients and hospitals.
+// Synthetic discharge letters for the demo (DOK-01, MED-04). Fictional patients and hospitals.
 // The browser draws the lines onto a canvas and sends that picture to the same reader as a photo,
 // so judges do not need to take a picture. `expected` is the answer key and the fallback output
 // ("Sample output") when the AI is unavailable.
 
+import type { Lang } from "./exercises";
 import type { FieldValue, IntakeField } from "./intake";
 
-export type SampleLetter = { id: "id" | "en"; title: string; lines: string[]; expected: Record<IntakeField, string | number | null>; medications: string[] };
+export type SampleLetter = { id: string; lang: Lang; title: string; lines: string[]; expected: Record<IntakeField, string | number | null>; medications: string[] };
 
 export const SAMPLE_LETTERS: SampleLetter[] = [
   {
     id: "id",
+    lang: "id",
     title: "Resume Medis Pulang · RS Harapan Sejahtera",
     lines: [
       "SAMPLE · fictional patient",
@@ -42,6 +44,7 @@ export const SAMPLE_LETTERS: SampleLetter[] = [
   },
   {
     id: "en",
+    lang: "en",
     title: "Discharge summary · Riverside General Hospital",
     lines: [
       "SAMPLE · fictional patient",
@@ -72,6 +75,87 @@ export const SAMPLE_LETTERS: SampleLetter[] = [
       nextVisitDate: "2026-10-21", hospital: "Riverside General Hospital",
     },
     medications: ["Aspirin 80 mg once daily", "Paracetamol 500 mg when needed"],
+  },
+  {
+    id: "id-long",
+    lang: "id",
+    title: "Resume Medis lengkap · RSUD Kota Contoh",
+    lines: [
+      "SAMPEL · pasien fiktif",
+      "RSUD KOTA CONTOH (fiktif)",
+      "RESUME MEDIS PASIEN PULANG",
+      "No. RM      : 00-12-34-56      Ruang: Melati 3 / Kelas II",
+      "Nama        : Tn. Slamet Riyadi",
+      "Tgl lahir   : 14-03-1964 (62 th)   Jenis kelamin: Laki-laki",
+      "Penjamin    : BPJS Kesehatan (PBI)",
+      "Tgl masuk   : 02-10-2026 (IGD)   Tgl keluar: 13-10-2026",
+      "DPJP        : dr. Andi Pratama, Sp.B",
+      "Konsul      : dr. Sinta, Sp.PD-KEMD; dr. Rahma, Sp.KFR",
+      "",
+      "ANAMNESIS",
+      "Luka kehitaman jari 1-3 kaki kiri sejak 3 minggu, berbau,",
+      "demam 3 hari. DM tipe 2 sejak 2014, minum obat tidak",
+      "teratur. Hipertensi. Merokok 1 bungkus/hari 30 tahun.",
+      "",
+      "PEMERIKSAAN FISIK (saat masuk)",
+      "TD 150/90  N 102x/mnt  S 38,4 C  GCS 15",
+      "Pedis sinistra: gangren basah digiti I-III, pus (+),",
+      "a. dorsalis pedis sinistra tidak teraba.",
+      "",
+      "PEMERIKSAAN PENUNJANG",
+      "GDS 386 mg/dL; HbA1c 11,2%; Hb 10,1 g/dL; Leukosit 21.400",
+      "Ureum 48; Kreatinin 1,4; Albumin 2,9 g/dL",
+      "Ro pedis S: osteomielitis metatarsal I-II. ABI S 0,52",
+      "Kultur pus: Klebsiella pneumoniae (ESBL)",
+      "",
+      "DIAGNOSIS UTAMA",
+      "Gangren diabetik pedis sinistra dg osteomielitis (E11.52)",
+      "DIAGNOSIS SEKUNDER",
+      "Hipertensi (I10); Anemia ringan (D64.9);",
+      "Hipoalbuminemia (E88.0); Penyakit arteri perifer (I73.9)",
+      "",
+      "TINDAKAN",
+      "1. Debridement pedis sinistra (03-10-2026)",
+      "2. Amputasi transtibial (bawah lutut) sinistra",
+      "   tgl 06-10-2026 (ICD-9-CM 84.15)",
+      "",
+      "KONDISI SAAT PULANG",
+      "Sadar baik, afebris, TD 130/80. Luka puntung tertutup,",
+      "jahitan baik, drain sudah dilepas, rembesan (-).",
+      "",
+      "OBAT PULANG",
+      "Insulin glargine 16 IU malam; Insulin aspart 3x6 IU",
+      "Amlodipin 10 mg 1x1; Cefixime 200 mg 2x1 (5 hari)",
+      "Paracetamol 500 mg 3x1 bila nyeri; Asam folat 1x1",
+      "",
+      "INSTRUKSI / EDUKASI",
+      "- Belum boleh menumpu kaki kiri, pakai kursi roda/walker.",
+      "- Jangan ganjal bantal di bawah lutut kiri; lutut lurus",
+      "  saat berbaring.",
+      "- Ganti balutan tiap 2 hari di Puskesmas atau oleh",
+      "  keluarga yang sudah diajari perawat.",
+      "- Periksa kaki kanan tiap hari; pakai alas kaki tertutup.",
+      "- Cek gula darah pagi & malam, catat di buku.",
+      "- Berhenti merokok.",
+      "- Ke IGD bila demam, luka berbau/bernanah, puntung",
+      "  bengkak merah, atau gula darah > 300.",
+      "",
+      "KONTROL",
+      "Poli Bedah 20-10-2026 (lepas jahitan)",
+      "Poli Penyakit Dalam 22-10-2026",
+      "Poli Rehabilitasi Medik 27-10-2026",
+      "Bawa surat rujukan dari Puskesmas (BPJS).",
+      "",
+      "Kota Contoh, 13-10-2026",
+      "DPJP: dr. Andi Pratama, Sp.B (fiktif)",
+    ],
+    expected: {
+      patientName: "Tn. Slamet Riyadi", age: 62, sex: "male", amputationSide: "left", amputationLevel: "below_knee", cause: "diabetes",
+      surgeryDate: "2026-10-06", comorbidities: "DM tipe 2, hipertensi, anemia ringan, hipoalbuminemia, penyakit arteri perifer",
+      restrictions: "Belum boleh menumpu kaki kiri. Jangan ganjal bantal di bawah lutut kiri. Ganti balutan tiap 2 hari. Periksa kaki kanan tiap hari.",
+      nextVisitDate: "2026-10-20", hospital: "RSUD Kota Contoh",
+    },
+    medications: ["Insulin glargine 16 IU malam", "Insulin aspart 3x6 IU", "Amlodipin 10 mg 1x1", "Cefixime 200 mg 2x1 (5 hari)", "Paracetamol 500 mg 3x1 bila nyeri", "Asam folat 1x1"],
   },
 ];
 

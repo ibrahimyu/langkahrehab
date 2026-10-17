@@ -1,4 +1,4 @@
-import { applyEdits, applyIntake, missingRequired, patientFromIntake, sanitizeFamily, type IntakeResult } from "#shared/intake";
+import { applyEdits, applyIntake, missingRequired, patientFromIntake, sanitizeFamily, sanitizeTasks, type IntakeResult } from "#shared/intake";
 
 // DOK-01 Confirm: the doctor's reviewed fields become a patient (profile, plan v1 waiting for the
 // physio, readiness, family tasks, the follow-up visit) in one write. For a letter from the family
@@ -12,6 +12,7 @@ export default defineEventHandler(async (event) => {
   const b = (await readBody(event)) ?? {};
   intake.fields = applyEdits(intake.fields, b.values);
   if (b.family !== undefined) intake.family = sanitizeFamily(b.family, intake.lang);
+  if (b.tasks !== undefined) intake.suggestedTasks = sanitizeTasks(b.tasks);
   const missing = missingRequired(intake.fields);
   if (missing.length) throw createError({ statusCode: 400, statusMessage: `Fill in: ${missing.join(", ")}.`, data: { missing } });
   const iso = new Date(now).toISOString();

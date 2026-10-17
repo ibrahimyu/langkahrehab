@@ -46,7 +46,7 @@ async function onFile(e: Event) {
 }
 function useSample(s: SampleLetter) {
   const image = drawSampleLetter(s.lines);
-  void read({ image, sample: s.id, lang: s.id }, image);
+  void read({ image, sample: s.id, lang: s.lang }, image);
 }
 
 let started = false;
@@ -95,7 +95,7 @@ onMounted(() =>
         <h2 class="cr-h">{{ T("ikUseSample") }}</h2>
         <button v-for="s in SAMPLE_LETTERS" :key="s.id" type="button" class="card ik-sample" @click="useSample(s)">
           <FileText class="ic" aria-hidden="true" />
-          <span><b>{{ s.title }}</b><br /><span class="cr-meta">{{ T("ikSampleLabel") }} · {{ s.id.toUpperCase() }}</span></span>
+          <span><b>{{ s.title }}</b><br /><span class="cr-meta">{{ T("ikSampleLabel") }} · {{ s.lang.toUpperCase() }} · {{ T("ikLines", { n: s.lines.length }) }}</span></span>
         </button>
       </section>
     </template>
