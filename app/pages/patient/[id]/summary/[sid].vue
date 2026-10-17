@@ -6,11 +6,9 @@ const T = useT();
 </script>
 
 <template>
-  <div class="phone-col">
-    <div class="phone">
+  <div class="app-col">
       <PatientSummary :patient-id="id" :session-id="sid">
         <NuxtLink :to="`/patient/${id}`" class="primary big-btn">{{ T("home") }}</NuxtLink>
       </PatientSummary>
-    </div>
   </div>
 </template>

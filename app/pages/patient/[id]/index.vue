@@ -5,9 +5,7 @@ onMounted(() => (role.value = "patient"));
 </script>
 
 <template>
-  <div class="phone-col">
-    <div class="phone">
+  <PatientShell :patient-id="id">
       <PatientHome :patient-id="id" variant="home" @start="navigateTo(`/patient/${id}/session`)" @skin="navigateTo(`/patient/${id}/skin`)" />
-    </div>
-  </div>
+  </PatientShell>
 </template>

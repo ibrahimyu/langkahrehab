@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { locale, type TextKey } from "#shared/i18n";
 import type { Patient, SkinArea, SkinCheck } from "#shared/model";
+import { limbName, limbsOf } from "#shared/limbs";
 
 // Skin photo check: the patient photographs the amputated leg or the other foot; Gemini lists
 // visible signs and how soon to contact the clinic. Without a photo, an example result can be shown.
 const props = defineProps<{ patientId: string }>();
-const api = useApi();
+const api = useApi("patient");
 const lang = useLang();
 const T = useT();
 const version = useDataVersion();
@@ -18,7 +19,9 @@ watch(version, load);
 
 const area = ref<SkinArea>("residual_limb");
 const otherSide = computed(() => T(p.value?.profile.side === "left" ? "right" : "left"));
-const areaLabel = (a: SkinArea) => (a === "other_foot" ? T("otherFoot", { side: otherSide.value }) : T("amputatedLeg", { side: T(p.value?.profile.side ?? "left") }));
+const ownLimb = computed(() => (p.value ? limbsOf(p.value.profile)[0] : undefined));
+const areaLabel = (a: SkinArea) =>
+  a === "other_foot" ? T("otherFoot", { side: otherSide.value }) : ownLimb.value ? limbName(lang.value, ownLimb.value) : T("amputatedLeg", { side: T(p.value?.profile.side ?? "left") });
 const preview = ref("");
 const image = ref("");
 const busy = ref(false);
@@ -92,6 +95,7 @@ const showExample = () => (latest.value = p.value?.skinChecks.at(-1) ?? null);
       <template v-else>
         <p><span class="pill urgency" :class="latest.result.urgency">{{ urgency(latest.result.urgency) }}</span></p>
         <p class="lead-text">{{ latest.result.patientMessage }}</p>
+        <UiReadAloud style="justify-self: start; align-self: flex-start" :text="latest.result.patientMessage" />
         <p v-if="latest.result.urgency === 'contact_soon' || latest.result.urgency === 'urgent'" class="good-text">🔔 {{ T("careTold") }}</p>
       </template>
     </div>
@@ -101,7 +105,6 @@ const showExample = () => (latest.value = p.value?.skinChecks.at(-1) ?? null);
     <ul class="exercise-list">
       <li v-for="c in [...p.skinChecks].reverse()" :key="c.id">
         <span>{{ new Date(c.at).toLocaleDateString(locale(lang), { day: "numeric", month: "short" }) }}</span>
-        <span class="hint">{{ areaLabel(c.area) }}</span>
         <span class="dose"><span class="pill urgency" :class="c.result.urgency">{{ c.result.usable ? urgency(c.result.urgency) : T("notClear") }}</span></span>
       </li>
       <li v-if="!p.skinChecks.length" class="hint">{{ T("noneYet") }}</li>

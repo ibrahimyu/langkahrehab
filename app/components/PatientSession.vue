@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { exerciseById } from "#shared/exercises";
+import { exerciseById, howTo } from "#shared/exercises";
 import type { TextKey } from "#shared/i18n";
 import { limbOf, type Patient, type SessionRecord } from "#shared/model";
 import type { RepEvent } from "#shared/pose";
+import { detectRedFlags, SpeechWindow } from "#shared/redflags";
 import type { Scenario } from "#shared/scenarios";
 import { applyTool, createSession, currentItem, currentLog, endRest, results, toRecordExercises, type Session } from "#shared/session";
 import { VOICES, defaultSettings, parseSettings, type Settings } from "#shared/settings";
@@ -13,10 +14,11 @@ const props = defineProps<{ patientId: string; simulation?: Scenario["simulation
 const emit = defineEmits<{ saved: [sessionId: string] }>();
 
 const SETTINGS_KEY = "langkah-session-settings";
-const api = useApi();
+const api = useApi("patient");
 const lang = useLang();
 const T = useT();
 const version = useDataVersion();
+const pending = usePendingSession(props.patientId);
 
 const patient = ref<Patient | null>(null);
 const loadError = ref("");
@@ -27,6 +29,8 @@ onMounted(async () => {
   try {
     const saved = localStorage.getItem(SETTINGS_KEY);
     if (saved) Object.assign(settings, parseSettings(JSON.parse(saved)));
+    // UXA-09: on a low-end phone, start with the lighter pose model.
+    else if ((navigator.hardwareConcurrency || 8) <= 4 || ((navigator as { deviceMemory?: number }).deviceMemory ?? 8) <= 3) settings.poseModel = "lite";
   } catch {}
   try {
     patient.value = (await api<{ patient: Patient }>(`/api/patients/${props.patientId}`)).patient;
@@ -49,8 +53,10 @@ const coach = useLiveCoach({
   onTool: (name, args) => {
     const s = session.value!;
     if (name === "save_memory" || name === "log_diary") {
+      // BUG-03: a failed send is kept on the phone and goes out with the session, never dropped.
       const path = name === "save_memory" ? "memories" : "diary";
-      api(`/api/patients/${props.patientId}/${path}`, { method: "POST", body: { ...args, source: "coach" } }).catch(() => {});
+      const body = { ...args, source: "coach" };
+      api(`/api/patients/${props.patientId}/${path}`, { method: "POST", body }).catch(() => pending.queueExtra(path, body));
       return { ok: true };
     }
     // In camera mode the camera's count is the source of truth, whatever number the coach says.
@@ -63,6 +69,7 @@ const coach = useLiveCoach({
   onInput: (text) => {
     const s = session.value;
     if (s?.phase === "set") currentLog(s).heardText += text;
+    checkSafety(speech.push(text, Date.now()));
   },
   onTurnStart: () => {
     const s = session.value!;
@@ -110,6 +117,9 @@ watch(
   },
 );
 
+// UXA-07: explain camera and microphone before the browser asks.
+const gate = ref<{ ask: () => Promise<void> } | null>(null);
+
 async function begin() {
   try {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
@@ -143,29 +153,37 @@ const skipRest = () => session.value && (session.value.restUntil = Date.now());
 const saving = ref(false);
 const saveError = ref("");
 let saved = false;
+// One id per session: the server keeps the first copy, so a retry never makes a second session.
+const clientId = crypto.randomUUID();
 async function save(s: Session, phantomPain: number | null = null) {
   saving.value = true;
+  saveError.value = "";
   // A set cut short (stopped for a danger sign) keeps the reps the camera counted.
   for (const it of s.items) for (const l of it.log) if (l.logged === null && l.camera !== null) l.logged = l.camera;
+  if (phantomPain !== null) pending.queueExtra("diary", { kind: "phantom_pain", score: phantomPain, source: "coach" });
+  const body = {
+    clientId,
+    lang: lang.value,
+    mode: s.mode,
+    exercises: toRecordExercises(s),
+    painBefore: s.painBefore,
+    painAfter: s.painAfter,
+    difficulty: s.difficulty,
+    concern: s.concern && { kind: s.concern.kind, details: s.concern.details, source: s.concern.source },
+  };
+  await sendPending({ path: "sessions", body });
+}
+/** Sends what is waiting (this session, and anything kept from before). Kept on the phone on failure. */
+async function sendPending(sessionRequest?: { path: string; body: Record<string, unknown> }) {
+  saving.value = true;
+  saveError.value = "";
   try {
-    if (phantomPain !== null)
-      await api(`/api/patients/${props.patientId}/diary`, { method: "POST", body: { kind: "phantom_pain", score: phantomPain, source: "coach" } });
-    const res = await api<{ session: SessionRecord }>(`/api/patients/${props.patientId}/sessions`, {
-      method: "POST",
-      body: {
-        lang: lang.value,
-        mode: s.mode,
-        exercises: toRecordExercises(s),
-        painBefore: s.painBefore,
-        painAfter: s.painAfter,
-        difficulty: s.difficulty,
-        concern: s.concern && { kind: s.concern.kind, details: s.concern.details },
-      },
-    });
+    const id = await pending.send(sessionRequest);
     version.value++;
-    emit("saved", res.session.id);
+    if (id) emit("saved", id);
   } catch (e) {
-    saveError.value = errorMessage(e, "Could not save the session.");
+    saveError.value = errorMessage(e, T("notSavedYet"));
+  } finally {
     saving.value = false;
   }
 }
@@ -229,7 +247,7 @@ async function simulate() {
       }
       if (sim.concern && i === 0 && set === 1) {
         await say("you", "sim_danger_patient", {}, 1600);
-        applyTool(s, "report_concern", { kind: sim.concern.kind, details: sim.concern.details }, Date.now());
+        applyTool(s, "report_concern", { kind: sim.concern.kind, details: sim.concern.details, source: "simulation" }, Date.now());
         await say("coach", "sim_danger_coach", {}, 2200);
         simCount.value = null;
         await save(s, sim.phantomPain);
@@ -288,10 +306,37 @@ const setBars = computed(() => {
 
 const typed = ref("");
 function sendTyped() {
-  if (!typed.value.trim()) return;
-  coach.say(typed.value.trim());
+  const text = typed.value.trim();
+  if (!text) return;
+  coach.say(text);
+  checkSafety(text);
   typed.value = "";
 }
+
+// ---- SYS-01: safety net that does not depend on the model ----
+// Everything the patient says (live transcription, last 10 s) or types is checked for danger signs.
+// The coach gets 3 seconds to call report_concern itself; if it has not, the app stops the session.
+const speech = new SpeechWindow(10_000);
+let safetyTimer: ReturnType<typeof setTimeout> | undefined;
+const SAFETY_GRACE_MS = 3000;
+function checkSafety(text: string) {
+  const s = session.value;
+  if (!s || s.phase === "stopped" || s.phase === "done" || safetyTimer) return;
+  const flag = detectRedFlags(text, lang.value);
+  if (!flag) return;
+  safetyTimer = setTimeout(() => {
+    safetyTimer = undefined;
+    const now = session.value;
+    if (!now || now.phase === "stopped" || now.phase === "done") return; // the coach already stopped it
+    applyTool(now, "report_concern", { kind: flag.kind, details: text.slice(-200), source: "keyword_fallback" }, Date.now());
+    coach.say(
+      flag.kind === "distress"
+        ? `[APP] Safety: the patient said "${flag.match}". The session is stopped. Speak slowly and gently, say you are glad they told you and that they are not alone, and encourage them to talk to someone they trust now, or call 112 if they might hurt themselves. Their care team has been told.`
+        : `[APP] Safety: the patient said "${flag.match}". The session is stopped. Tell them calmly to stop and rest, and to contact their clinic today, or emergency services if it is an emergency. Their care team has been told.`,
+    );
+  }, SAFETY_GRACE_MS);
+}
+onBeforeUnmount(() => clearTimeout(safetyTimer));
 </script>
 
 <template>
@@ -302,8 +347,9 @@ function sendTyped() {
       <p class="eyebrow">{{ T("today") }}</p>
       <h1>{{ shownExercise?.name[lang] }}</h1>
       <MediaFrame v-if="shownExercise" kind="video" :src="`/media/exercises/${shownExercise.id}.mp4`" :poster="`/media/exercises/${shownExercise.id}.jpg`" :label="T('video')" style="aspect-ratio: 16 / 9; border-radius: 22px" />
-      <p v-if="shownExercise" class="hint">{{ shownExercise.instructions[lang] }}</p>
-      <button class="primary big-btn pill-btn" @click="begin">{{ T("connect") }}</button>
+      <p v-if="shownExercise" class="hint">{{ howTo(shownExercise, lang, patient.profile) }}</p>
+      <button class="primary big-btn pill-btn" @click="gate?.ask()">{{ T("connect") }}</button>
+      <PermissionGate ref="gate" :camera="settings.mode === 'camera'" @go="begin" @without-camera="settings.mode = 'patient'; begin()" />
       <button class="ghost big-btn pill-btn" @click="simulate">{{ T("simulate") }}</button>
       <p class="sim-note">{{ T("simHint") }}</p>
     </div>
@@ -313,8 +359,8 @@ function sendTyped() {
       <div class="imm-top">
         <div class="set-bars"><span v-for="b in setBars" :key="b.key" :class="{ done: b.done, on: b.on }" /></div>
         <div class="bar" v-if="item">
-          <b style="font-size: 18px">{{ item.exercise.name[lang] }}</b>
-          <span style="color: #9cbad3; font-size: 13px">{{ T("exerciseOf", { n: session!.item + 1, m: session!.items.length }) }}<template v-if="simulating"> · {{ T("simulating") }}</template></span>
+          <b class="imm-title">{{ item.exercise.name[lang] }}</b>
+          <span class="on-night-2 hint-night">{{ T("exerciseOf", { n: session!.item + 1, m: session!.items.length }) }}<template v-if="simulating"> · {{ T("simulating") }}</template></span>
         </div>
       </div>
 
@@ -343,11 +389,11 @@ function sendTyped() {
         </div>
         <div v-else-if="(session!.phase === 'intro' || session!.phase === 'ready') && simCount === null" class="imm-center">
           <div class="tile-big">{{ T("getReady") }}</div>
-          <p v-if="session!.painBefore !== null" style="color: #c9daea">{{ T("painBeforeAfter", { before: session!.painBefore, after: "–" }) }}</p>
+          <p v-if="session!.painBefore !== null" class="on-night-2">{{ T("painBeforeAfter", { before: session!.painBefore, after: "–" }) }}</p>
         </div>
         <div v-else-if="session!.phase === 'after' || session!.phase === 'done'" class="imm-center">
           <div class="tile-big">{{ T("summary") }}</div>
-          <p style="color: #c9daea">{{ T("painBeforeAfter", { before: session!.painBefore ?? "–", after: session!.painAfter ?? "–" }) }}</p>
+          <p class="on-night-2">{{ T("painBeforeAfter", { before: session!.painBefore ?? "–", after: session!.painAfter ?? "–" }) }}</p>
         </div>
 
         <div v-if="session!.concern" class="imm-alert">
@@ -370,9 +416,12 @@ function sendTyped() {
           <input v-model="typed" :placeholder="T('typeInstead')" />
           <button class="primary pill-btn">{{ T("send") }}</button>
         </form>
-        <p v-if="saving" style="color: #c9daea; text-align: center">{{ T("saving") }}</p>
-        <p v-if="coach.error.value" class="error" style="color: #f8b4ae">{{ coach.error.value }}</p>
-        <p v-if="saveError" class="error" style="color: #f8b4ae">{{ saveError }}</p>
+        <p v-if="saving" class="on-night-2" style="text-align: center">{{ T("saving") }}</p>
+        <p v-if="coach.error.value" class="night-error">{{ coach.error.value }}</p>
+        <div v-if="saveError" class="save-retry" role="alert">
+          <p class="night-error">{{ T("notSavedYet") }}</p>
+          <button class="primary big-btn" :disabled="saving" @click="sendPending()">{{ T("tryAgain") }}</button>
+        </div>
       </div>
     </div>
 
