@@ -328,7 +328,7 @@ function onRep(e: RepEvent) {
 /* Practice: the video to copy next to the camera that checks (stacked upright, side by side on its side). */
 .tut-split { display: grid; gap: 8px; }
 .tut-split .demo { aspect-ratio: 16 / 9; height: auto; }
-@media (orientation: landscape) {
+@media (orientation: landscape) and (max-height: 520px) {
   .tut-split { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
 }
 .tut-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }

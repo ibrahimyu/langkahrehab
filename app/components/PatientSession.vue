@@ -571,7 +571,6 @@ const DIFFS: Difficulty[] = ["easy", "ok", "hard"];
         <div v-else-if="engine === 'guide' && session.phase === 'ready' && item" class="imm-center imm-panel">
           <div class="tile-big">{{ T("setOf", { n: session.current, m: item.sets }) }}</div>
           <p class="on-night-2">{{ T("setsReps", { sets: 1, reps: item.reps }) }} · {{ item.exercise.tempo[lang] }}</p>
-          <ExerciseVideoButton :exercise-id="item.exercise.id" :level="patient.profile.level" />
           <p v-if="settings.support === 'helper'" class="helper-tip">{{ T("helperTip") }}</p>
           <p v-if="cameraBlind()" class="helper-tip">{{ T("cueCantSee") }}</p>
           <button class="primary big-btn pill-btn" :disabled="cameraBlind()" @click="startSet">{{ T("sesStartSet", { n: session.current }) }}</button>
@@ -579,7 +578,6 @@ const DIFFS: Difficulty[] = ["easy", "ok", "hard"];
         <!-- Coach engine: waiting for the coach -->
         <div v-else-if="engine === 'coach' && (session.phase === 'intro' || session.phase === 'ready')" class="imm-center">
           <div class="tile-big">{{ T("getReady") }}</div>
-          <ExerciseVideoButton v-if="item && session.phase === 'ready'" :exercise-id="item.exercise.id" :level="patient.profile.level" />
           <p v-if="session.painBefore !== null" class="on-night-2">{{ T("painBeforeAfter", { before: session.painBefore, after: "–" }) }}</p>
         </div>
         <!-- Rest -->
@@ -632,11 +630,12 @@ const DIFFS: Difficulty[] = ["easy", "ok", "hard"];
           <div><b>{{ T("stopped") }}</b><span>{{ T("next_stop_contact") }}</span></div>
         </div>
 
-        <div v-if="caption" class="imm-caption glass">
-          <span class="wave" :class="{ on: speaking || coach.userSpeaking.value, you: captionWho === 'you' }"><i /><i /><i /><i /></span>
-          <span><b>{{ captionWho === "you" ? T("you") : T("coach") }}:</b> {{ caption }}</span>
-        </div>
       </div>
+      </div>
+
+      <div v-if="caption" class="imm-caption glass">
+        <span class="wave" :class="{ on: speaking || coach.userSpeaking.value, you: captionWho === 'you' }"><i /><i /><i /><i /></span>
+        <span><b>{{ captionWho === "you" ? T("you") : T("coach") }}:</b> {{ caption }}</span>
       </div>
 
       <div>
@@ -711,7 +710,8 @@ const DIFFS: Difficulty[] = ["easy", "ok", "hard"];
 .imm-split.with-demo { grid-template-rows: auto minmax(0, 1fr); }
 .demo-pane { aspect-ratio: 16 / 9; }
 .demo-reopen { position: absolute; z-index: 2; top: 8px; left: 50%; transform: translateX(-50%); min-height: 36px; padding: 4px 12px; border-radius: var(--r-pill); border: 1px solid var(--night-line); background: var(--night-raised); color: var(--on-night); font-weight: 600; cursor: pointer; }
-@media (orientation: landscape) {
+/* Side by side only when a phone is turned on its side (short and wide), not on a wide laptop window. */
+@media (orientation: landscape) and (max-height: 520px) {
   .imm-split.with-demo { grid-template-rows: none; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .demo-pane { aspect-ratio: auto; }
 }
