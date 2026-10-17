@@ -317,9 +317,9 @@ async function accept(item: { p: Proposal; state: string }) {
       </section>
       <template v-else>
         <p v-if="voice.error.value" class="error">{{ voice.error.value }}</p>
-        <button class="voice-start" :disabled="!patient" @click="startVoice"><AudioLines class="ic" aria-hidden="true" /> {{ T("talkVoiceStart") }}</button>
         <form class="composer" @submit.prevent="send()">
-          <textarea v-model="draft" rows="2" maxlength="600" :placeholder="T('talkPlaceholderType')" :aria-label="T('talkPlaceholderType')" @keydown.enter.exact.prevent="send()" />
+          <button type="button" class="voice-start" :disabled="!patient" @click="startVoice"><AudioLines class="ic" aria-hidden="true" /> {{ T("talkVoiceStart") }}</button>
+          <textarea v-model="draft" rows="1" maxlength="600" :placeholder="T('talkPlaceholderType')" :aria-label="T('talkPlaceholderType')" @keydown.enter.exact.prevent="send()" />
           <div class="controls">
             <button class="primary" :disabled="!draft.trim() || sending || !patient"><Send class="ic" aria-hidden="true" /> {{ T("send") }}</button>
           </div>
