@@ -435,6 +435,8 @@ const caption = computed(() => (engine.value === "coach" ? coach.caption.value :
 const speaking = computed(() => coach.state.value === "speaking");
 const captionWho = computed(() => (coach.userSpeaking.value ? "you" : "coach"));
 const showType = ref(false);
+// The clinician's video next to the camera, so the patient can copy the movement.
+const showDemo = ref(true);
 const pulseKey = ref(0);
 watch(count, (n, old) => n !== null && n !== old && pulseKey.value++);
 // One bar per set across the whole plan.
@@ -535,6 +537,9 @@ const DIFFS: Difficulty[] = ["easy", "ok", "hard"];
         </div>
       </div>
 
+      <div class="imm-split" :class="{ 'with-demo': showDemo && !!shownExercise }">
+        <ExerciseDemo v-if="showDemo && shownExercise" class="demo-pane" :exercise-id="shownExercise.id" :level="patient.profile.level" @hide="showDemo = false" />
+        <button v-else-if="shownExercise" class="demo-reopen" @click="showDemo = true">{{ T("demoShow") }}</button>
       <div class="imm-stage">
         <PoseTracker
           v-if="useCamera && shownExercise && trackable"
@@ -632,6 +637,7 @@ const DIFFS: Difficulty[] = ["easy", "ok", "hard"];
           <span><b>{{ captionWho === "you" ? T("you") : T("coach") }}:</b> {{ caption }}</span>
         </div>
       </div>
+      </div>
 
       <div>
         <p v-if="coachDown" class="on-night-2 ses-center">{{ T("sesCoachBusy") }}</p>
@@ -700,6 +706,15 @@ const DIFFS: Difficulty[] = ["easy", "ok", "hard"];
 .mic-level { height: 3px; margin-top: 8px; border-radius: 2px; background: var(--night-line); overflow: hidden; }
 .mic-level i { display: block; height: 100%; background: var(--dawn); transition: width 80ms linear; }
 .voice-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+/* Phone upright: video above the camera. Phone on its side: video and camera side by side. */
+.imm-split { position: relative; display: grid; gap: 8px; min-height: 0; }
+.imm-split.with-demo { grid-template-rows: auto minmax(0, 1fr); }
+.demo-pane { aspect-ratio: 16 / 9; }
+.demo-reopen { position: absolute; z-index: 2; top: 8px; left: 50%; transform: translateX(-50%); min-height: 36px; padding: 4px 12px; border-radius: var(--r-pill); border: 1px solid var(--night-line); background: var(--night-raised); color: var(--on-night); font-weight: 600; cursor: pointer; }
+@media (orientation: landscape) {
+  .imm-split.with-demo { grid-template-rows: none; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .demo-pane { aspect-ratio: auto; }
+}
 .feel { display: grid; gap: 10px; justify-items: center; width: 100%; }
 .diff-row.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .helper-tip { margin: 0; max-width: 360px; padding: 10px 12px; border-radius: 12px; background: var(--night-raised); color: var(--on-night); font-size: 0.9375rem; text-align: left; }
