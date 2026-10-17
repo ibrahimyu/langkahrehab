@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import type { Component } from "vue";
-import { Check, ChevronDown, House, ListChecks, MessageCircleQuestion, RotateCw, Users } from "lucide-vue-next";
+import { Check, ChevronDown, HeartHandshake, House, ListChecks, MessageCircleQuestion, RotateCw, Users } from "lucide-vue-next";
 import type { TextKey } from "#shared/i18n";
 
-// The family app (KEL-01): its own four places in a bottom tab bar, and "I am …" at the top so
+// The family app (KEL-01): its own five places in a bottom tab bar, and "I am …" at the top so
 // whoever holds the phone (Bu Sri, Dimas) sees their own tasks. Loading and error states live here once.
 const props = defineProps<{ patientId: string }>();
 const T = useT();
@@ -19,6 +19,7 @@ const tabs: { key: TextKey; icon: Component; to: string }[] = [
   { key: "famTabToday", icon: House, to: "" },
   { key: "famTabTasks", icon: ListChecks, to: "/tasks" },
   { key: "famTabQuestions", icon: MessageCircleQuestion, to: "/questions" },
+  { key: "famTabTalk", icon: HeartHandshake, to: "/talk" },
   { key: "famTabFamily", icon: Users, to: "/members" },
 ];
 const base = computed(() => `/family/${props.patientId}`);

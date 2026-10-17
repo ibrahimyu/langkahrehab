@@ -447,6 +447,20 @@ const text = {
   supportHelperHint: { en: "Your helper sees tips on the screen. You hear the cues.", id: "Pendamping melihat tips di layar. Anda mendengar aba-abanya.", zh: "陪同者在屏幕上看提示，您听语音提示。" },
   helperTip: { en: "For the helper: stay close on the side of the amputated limb. Keep a hand near but let them do the movement. Watch the count and the tip on the screen.", id: "Untuk pendamping: berdiri dekat di sisi anggota tubuh yang diamputasi. Tangan siap di dekatnya, tapi biarkan pasien bergerak sendiri. Perhatikan hitungan dan tips di layar.", zh: "给陪同者：站在截肢一侧附近，手放在旁边但让患者自己完成动作。注意屏幕上的计数和提示。" },
   cueCantSee: { en: "I can't see you well. Move the phone back a little.", id: "Saya kurang bisa melihat Anda. Mundurkan HP sedikit.", zh: "我看不太清楚您，把手机往后挪一点。" },
+  // ---- Family companion ----
+  famTabTalk: { en: "Talk", id: "Cerita", zh: "倾诉" },
+  famTalkTitle: { en: "Talk with Langkah", id: "Cerita dengan Langkah", zh: "和Langkah聊聊" },
+  famTalkLede: { en: "For you, while you care for {name}.", id: "Untuk Anda, selama mendampingi {name}.", zh: "给照顾{name}的您。" },
+  famTalkIntro: { en: "I am an AI companion, not a person or a doctor. Tell me how you are, or what you are unsure about, and we will find one next step together.", id: "Saya teman cerita AI, bukan orang atau dokter. Ceritakan keadaan Anda, atau apa yang membuat Anda bingung, dan kita cari satu langkah berikutnya bersama.", zh: "我是AI陪伴者，不是真人也不是医生。说说您的状况或让您不确定的事，我们一起找到下一步。" },
+  famTalkPrivate: { en: "This chat is only on this phone. The patient and the clinic do not read it. If you mention a danger sign about the patient, the clinic is told.", id: "Obrolan ini hanya ada di HP ini. Pasien dan klinik tidak membacanya. Kalau Anda menyebut tanda bahaya pada pasien, klinik akan diberi tahu.", zh: "这段聊天只在这部手机上，患者和诊所看不到。如果您提到患者的危险信号，会通知诊所。" },
+  famTalkStarter1: { en: "I don't know what I should do", id: "Saya tidak tahu harus berbuat apa", zh: "我不知道该怎么做" },
+  famTalkStarter2: { en: "I'm tired and worried", id: "Saya lelah dan khawatir", zh: "我又累又担心" },
+  famTalkStarter3: { en: "How can I help without doing too much for him?", id: "Bagaimana membantu tanpa terlalu memanjakannya?", zh: "怎样帮忙又不会替他做太多？" },
+  famTalkRedFlag: { en: "This may need a check today. The clinic has been told. See when to contact the clinic below.", id: "Ini mungkin perlu diperiksa hari ini. Klinik sudah diberi tahu. Lihat kapan menghubungi klinik di bawah.", zh: "这可能需要今天检查。已经通知诊所。请看下面何时联系诊所。" },
+  famTalkCrisis: { en: "Caring for someone you love can be very heavy. You deserve support too. Please talk to someone you trust now, or call the line below.", id: "Merawat orang yang Anda sayangi bisa sangat berat. Anda juga layak didukung. Bicaralah dengan orang yang Anda percaya sekarang, atau hubungi nomor di bawah.", zh: "照顾所爱的人可能非常辛苦，您也值得被支持。请现在找一个信任的人聊聊，或拨打下面的电话。" },
+  famTalkSaveQuestion: { en: "Save this question for the doctor: “{text}”", id: "Simpan pertanyaan ini untuk dokter: “{text}”", zh: "把这个问题留给医生：“{text}”" },
+  famTalkSaveIt: { en: "Save the question", id: "Simpan pertanyaan", zh: "保存问题" },
+  famTalkQuestionSaved: { en: "Saved in Questions for the doctor.", id: "Tersimpan di Pertanyaan untuk dokter.", zh: "已保存到给医生的问题。" },
   // ---- Landing ----
   lede: {
     en: "An AI rehab coach that keeps amputee patients exercising at home, and keeps their doctor and physiotherapist in the loop.",
