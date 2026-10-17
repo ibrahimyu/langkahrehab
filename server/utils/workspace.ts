@@ -32,7 +32,12 @@ export async function seed(ws: string) {
 /** The request's workspace (seeded if new) and the demo clock. */
 export async function context(event: H3Event) {
   const ws = await workspaceId(event);
-  const workspace = (await getWorkspace(ws)) ?? (await seed(ws));
+  let workspace = await getWorkspace(ws);
+  if (!workspace) {
+    // SYS-02: every new demo copy writes seed data; limit how many one visitor can create (production store only).
+    if (useRuntimeConfig().storage === "firestore") rateLimit(event, "", "ws-new", 10, 3_600_000);
+    workspace = await seed(ws);
+  }
   return { ws, workspace, now: nowFor(workspace) };
 }
 

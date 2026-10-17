@@ -1,10 +1,13 @@
+import { logActivity, WHO_AI } from "#shared/activity";
 import { describeProfile, pickLang } from "#shared/model";
 import { patientStats } from "#shared/stats";
 
 // Writes the care team brief from everything stored for the patient.
 export default defineEventHandler(async (event) => {
   const { ws, id, iso, patient: p } = await patientContext(event);
+  assertCan(actorFrom(event), "brief.generate");
   rateLimit(event, ws, "brief", 30, 60 * 60 * 1000);
+  await aiBudget(event, "brief");
   const lang = pickLang((await readBody(event).catch(() => ({})))?.lang ?? "en");
   const stats = patientStats(p);
   const data = {
@@ -16,6 +19,8 @@ export default defineEventHandler(async (event) => {
     skinChecks: p.skinChecks.slice(-10).map((c) => ({ at: c.at, area: c.area, urgency: c.result.urgency, findings: c.result.findings, note: c.result.careTeamNote })),
     openAlerts: p.alerts.filter((a) => !a.resolvedAt).map((a) => ({ at: a.at, kind: a.kind, message: a.message })),
     memories: p.memories.map((m) => ({ kind: m.kind, text: m.text })),
+    // PAS-18: what the patient told the team, grouped by kind; private notes stay out.
+    notes: p.notes.filter((n) => !n.private).slice(-30).reduce<Record<string, { at: string; quote: string; urgency: string; discussAtVisit: boolean; reply: string }[]>>((g, n) => ((g[n.kind] ??= []).push({ at: n.at, quote: n.quote, urgency: n.urgency, discussAtVisit: n.discussAtVisit, reply: n.reply }), g), {}),
   };
 
   let text: string;
@@ -33,6 +38,7 @@ export default defineEventHandler(async (event) => {
 
   const updated = await updatePatient(ws, id, (q) => {
     q.brief = { text, lang, generatedAt: iso, editedAt: null };
+    logActivity(q, { at: iso, actor: "ai", who: WHO_AI, action: "act_brief", refs: [{ kind: "plan", id: `brief-${iso}`, label: "Brief" }] });
   });
   return { brief: updated.brief, stats };
 });

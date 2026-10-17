@@ -5,7 +5,12 @@ import { addAlerts, afterSession } from "#shared/rules";
 // Saves a finished (or stopped) session, then runs the next-action rules.
 export default defineEventHandler(async (event) => {
   const { ws, id, iso, now, patient } = await patientContext(event);
+  assertCan(actorFrom(event), "session.save");
   const b = (await readBody(event)) ?? {};
+  // SYS-05: a retried save with the same clientId returns the first copy instead of a second session.
+  const clientId = str(b.clientId, 64) || null;
+  const existing = clientId ? patient.sessions.find((s) => s.clientId === clientId) : undefined;
+  if (existing) return { session: existing, alerts: [] };
   const exercises = (Array.isArray(b.exercises) ? b.exercises : [])
     .filter((e: any) => exerciseById(e?.exerciseId))
     .slice(0, 6)
@@ -25,6 +30,7 @@ export default defineEventHandler(async (event) => {
   if (!exercises.length) throw bad("Session has no exercises.");
   const session: SessionRecord = {
     id: newId(),
+    clientId,
     at: iso,
     planVersion: patient.plan.version,
     lang: pick(b.lang, LANGS, patient.lang),
@@ -34,7 +40,7 @@ export default defineEventHandler(async (event) => {
     painAfter: score(b.painAfter),
     difficulty: (["easy", "ok", "hard"] as const).includes(b.difficulty) ? b.difficulty : null,
     concern: b.concern && typeof b.concern === "object"
-      ? { kind: pick(b.concern.kind, CONCERNS, "other"), details: str(b.concern.details, 300) }
+      ? { kind: pick(b.concern.kind, CONCERNS, "other"), details: str(b.concern.details, 300), source: pick(b.concern.source, ["coach", "keyword_fallback", "simulation"] as const, "coach") }
       : null,
     nextAction: { kind: "keep_going" },
     source: "session",
@@ -42,6 +48,8 @@ export default defineEventHandler(async (event) => {
   const result = afterSession(patient, session, now);
   session.nextAction = result.nextAction;
   await updatePatient(ws, id, (p) => {
+    // Checked again inside the transaction: two retries racing each other still make one session.
+    if (clientId && p.sessions.some((s) => s.clientId === clientId)) return;
     p.sessions = [...p.sessions, session].slice(-100);
     addAlerts(p, result.alerts);
   });

@@ -8,7 +8,9 @@ import { parseSettings } from "#shared/settings";
 export default defineEventHandler(async (event) => {
   const body = (await readBody(event).catch(() => ({}))) ?? {};
   const { ws } = await context(event);
+  assertCan(actorFrom(event), "live.start");
   rateLimit(event, ws, "live", 20, 60 * 60 * 1000);
+  await aiBudget(event, "live");
   const patient = await getPatient(ws, String(body.patientId ?? ""));
   if (!patient) throw createError({ statusCode: 404, statusMessage: "Patient not found." });
   const settings = parseSettings(body.settings);
