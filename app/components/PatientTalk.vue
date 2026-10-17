@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { Bot, Check, ChevronRight, HeartHandshake, MoonStar, Phone, PhoneCall, Send, ShieldAlert, X } from "lucide-vue-next";
-import type { TextKey } from "#shared/i18n";
+import { Archive, Bot, Check, ChevronRight, HeartHandshake, History, MessageSquarePlus, MoonStar, Phone, PhoneCall, Send, ShieldAlert, Trash2, X } from "lucide-vue-next";
+import { locale, type TextKey } from "#shared/i18n";
 import type { Goal, Note, Patient, Preferences } from "#shared/model";
 import { isLate, type Proposal, type ReplyIssue, type TalkMessage } from "#shared/companion";
 import { recoveryCard, type RecoveryTopic } from "#shared/recovery";
@@ -38,6 +38,76 @@ let tick: ReturnType<typeof setInterval> | undefined;
 onMounted(() => (tick = setInterval(() => (clock.value = Date.now()), 15_000)));
 onBeforeUnmount(() => clearInterval(tick));
 const late = computed(() => isLate(clock.value));
+
+// ---- Kept on the phone: the open chat survives leaving the tab; an ended chat is saved or deleted ----
+const store = useTalkHistory<Bubble>(props.patientId);
+const startedAt = ref(new Date().toISOString());
+let talkId: string = crypto.randomUUID();
+onMounted(() => {
+  const open = store.loadOpen();
+  if (!open) return;
+  bubbles.value = open.bubbles;
+  draft.value = open.draft;
+  crisis.value = open.crisis;
+  startedAt.value = open.startedAt;
+  scrollDown();
+});
+watch([bubbles, draft, crisis], () => store.saveOpen({ startedAt: startedAt.value, bubbles: bubbles.value, draft: draft.value, crisis: crisis.value }), { deep: true });
+
+function clearOpen() {
+  bubbles.value = [];
+  draft.value = "";
+  crisis.value = false;
+  startedAt.value = new Date().toISOString();
+  talkId = crypto.randomUUID();
+}
+const snapshot = () => ({ id: talkId, startedAt: startedAt.value, endedAt: new Date().toISOString(), bubbles: structuredClone(toRaw(bubbles.value)) });
+const ending = ref(false);
+function endAndKeep() {
+  ending.value = false;
+  store.keep(snapshot());
+  clearOpen();
+  toast.show(T("talkSaved"), { tone: "good" });
+}
+function endAndDelete() {
+  ending.value = false;
+  const talk = snapshot();
+  const was = { draft: draft.value, crisis: crisis.value };
+  clearOpen();
+  toast.show(T("talkDeleted"), {
+    undo: () => {
+      bubbles.value = talk.bubbles;
+      startedAt.value = talk.startedAt;
+      talkId = talk.id;
+      draft.value = was.draft;
+      crisis.value = was.crisis;
+    },
+  });
+}
+
+const showHistory = ref(false);
+const viewing = ref<string | null>(null);
+const viewed = computed(() => store.history.value.find((t) => t.id === viewing.value) ?? null);
+const when = (iso: string) => new Date(iso).toLocaleString(locale(lang.value), { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+const preview = (t: { bubbles: Bubble[] }) => t.bubbles.find((b) => b.role === "user")?.text ?? "";
+function continueTalk(id: string) {
+  const talk = store.history.value.find((t) => t.id === id);
+  if (!talk) return;
+  if (bubbles.value.length) store.keep(snapshot());
+  store.remove(id);
+  bubbles.value = talk.bubbles;
+  startedAt.value = talk.startedAt;
+  talkId = talk.id;
+  crisis.value = false;
+  viewing.value = null;
+  showHistory.value = false;
+  scrollDown();
+}
+function deleteSaved(id: string) {
+  const undo = store.remove(id);
+  if (viewing.value === id) viewing.value = null;
+  toast.show(T("talkDeleted"), { undo });
+}
 
 const list = ref<HTMLElement | null>(null);
 const scrollDown = () => nextTick(() => list.value?.lastElementChild?.scrollIntoView({ behavior: "smooth", block: "end" }));
@@ -121,11 +191,15 @@ async function accept(item: { p: Proposal; state: string }) {
   <section class="talk">
     <header class="talk-head">
       <span class="talk-avatar" aria-hidden="true"><HeartHandshake class="ic" /></span>
-      <div>
+      <div class="talk-title">
         <h1>{{ T("talkTitle") }}</h1>
         <p class="hint">{{ T("talkLede") }}</p>
       </div>
     </header>
+    <div class="talk-actions">
+      <button class="ghost small-btn" @click="showHistory = true"><History class="ic" aria-hidden="true" /> {{ T("talkHistory") }}<template v-if="store.history.value.length"> · {{ store.history.value.length }}</template></button>
+      <button v-if="bubbles.length || crisis" class="ghost small-btn" @click="ending = true"><MessageSquarePlus class="ic" aria-hidden="true" /> {{ T("talkEnd") }}</button>
+    </div>
 
     <p v-if="loadError" class="error">{{ loadError }} <button class="link" @click="load">{{ T("tryAgain") }}</button></p>
 
@@ -188,10 +262,51 @@ async function accept(item: { p: Proposal; state: string }) {
         </div>
       </form>
     </template>
+
+    <UiSheet :open="ending" :title="T('talkEndTitle')" @close="ending = false">
+      <div class="stack">
+        <p>{{ T("talkEndBody") }}</p>
+        <button class="primary big-btn" @click="endAndKeep"><Archive class="ic" aria-hidden="true" /> {{ T("talkKeep") }}</button>
+        <button class="ghost danger big-btn" @click="endAndDelete"><Trash2 class="ic" aria-hidden="true" /> {{ T("talkDelete") }}</button>
+        <button class="link" @click="ending = false">{{ T("cancel") }}</button>
+      </div>
+    </UiSheet>
+
+    <UiSheet :open="showHistory" :title="viewed ? when(viewed.startedAt) : T('talkHistory')" @close="showHistory = false; viewing = null">
+      <div v-if="viewed" class="stack">
+        <ol class="bubbles">
+          <li v-for="(b, i) in viewed.bubbles" :key="i" class="bubble-row" :class="b.role">
+            <div class="bubble"><p>{{ b.text || (b.safeKey ? T(`talkSafe_${b.safeKey}` as TextKey) : "") }}</p></div>
+          </li>
+        </ol>
+        <button class="primary big-btn" @click="continueTalk(viewed.id)">{{ T("talkContinue") }}</button>
+        <button class="ghost danger big-btn" @click="deleteSaved(viewed.id)"><Trash2 class="ic" aria-hidden="true" /> {{ T("talkDelete") }}</button>
+        <button class="link" @click="viewing = null">{{ T("back") }}</button>
+      </div>
+      <div v-else class="stack">
+        <p class="hint">{{ T("talkHistoryHint") }}</p>
+        <p v-if="!store.history.value.length" class="card">{{ T("talkHistoryEmpty") }}</p>
+        <ul v-else class="talk-history">
+          <li v-for="t in store.history.value" :key="t.id">
+            <button class="talk-past" @click="viewing = t.id">
+              <span class="talk-past-main"><b>{{ when(t.startedAt) }}</b><span class="hint">{{ preview(t) }}</span></span>
+              <ChevronRight class="ic" aria-hidden="true" />
+            </button>
+            <button class="ghost small-btn" :aria-label="T('talkDelete')" @click="deleteSaved(t.id)"><Trash2 class="ic" aria-hidden="true" /></button>
+          </li>
+        </ul>
+      </div>
+    </UiSheet>
   </section>
 </template>
 
 <style scoped>
+.talk-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.talk-history { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.talk-history li { display: flex; gap: 6px; align-items: center; }
+.talk-past { flex: 1; min-width: 0; display: flex; gap: 10px; align-items: center; min-height: 60px; padding: 8px 12px; border-radius: var(--r-card); border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-align: left; cursor: pointer; }
+.talk-past-main { display: grid; flex: 1; min-width: 0; }
+.talk-past-main .hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .talk { display: grid; gap: 14px; }
 .talk-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .talk-head > div { flex: 1; min-width: 0; display: grid; gap: 2px; }
