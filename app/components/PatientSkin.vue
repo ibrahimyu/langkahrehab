@@ -73,7 +73,7 @@ const showExample = () => (latest.value = p.value?.skinChecks.at(-1) ?? null);
   <div v-if="p" class="patient-view">
     <h1>{{ T("skin") }}</h1>
     <p class="hint">{{ T("skinHint") }}</p>
-    <p v-if="p.profile.cause === 'diabetes'" class="note">{{ T("diabetesFoot", { side: otherSide }) }}</p>
+    <p v-if="p.profile.cause === 'diabetes' || p.profile.cause === 'vascular'" class="note">{{ T("diabetesFoot", { side: otherSide }) }}</p>
     <label class="field">
       <span>{{ T("photoOf") }}</span>
       <select v-model="area">
