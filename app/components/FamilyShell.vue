@@ -20,6 +20,7 @@ const tabs: { key: TextKey; icon: Component; to: string }[] = [
   { key: "famTabTasks", icon: ListChecks, to: "/tasks" },
   { key: "famTabQuestions", icon: MessageCircleQuestion, to: "/questions" },
   { key: "famTabTalk", icon: HeartHandshake, to: "/talk" },
+  { key: "famTabFamily", icon: Users, to: "/members" },
 ];
 const base = computed(() => `/family/${props.patientId}`);
 const isOn = (to: string) => (to ? route.path.startsWith(base.value + to) : route.path === base.value || route.path === `${base.value}/`);
@@ -39,7 +40,6 @@ const pick = (id: string) => {
         {{ T("famIAm", { name: me.name }) }}
         <ChevronDown class="ic" aria-hidden="true" />
       </button>
-      <NuxtLink :to="`${base}/members`" class="fam-people" :class="{ on: isOn('/members') }" :aria-label="T('famTabFamily')"><Users class="ic" aria-hidden="true" /></NuxtLink>
     </header>
 
     <div v-if="loadError" class="card stack fam-state" role="alert">
@@ -71,8 +71,6 @@ const pick = (id: string) => {
 </template>
 
 <style scoped>
-.fam-people { display: grid; place-items: center; width: 44px; height: 44px; flex: none; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
-.fam-people.on { background: var(--ink); color: var(--surface); }
 .family-app { padding-bottom: calc(92px + env(safe-area-inset-bottom)); }
 .fam-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
 .fam-patient { font-size: 0.8125rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--role-family); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -94,12 +92,13 @@ const pick = (id: string) => {
 .who.on { border-color: var(--pine); }
 .who .ic { color: var(--pine); margin-left: auto; }
 .who-name { display: grid; gap: 2px; }
-.tabbar { position: fixed; left: 50%; bottom: 0; z-index: 40; transform: translateX(-50%); width: min(560px, 100%); display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 8px 6px calc(10px + env(safe-area-inset-bottom)); background: color-mix(in srgb, var(--surface) 94%, transparent); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-top: 1px solid var(--line); }
+.tabbar { position: fixed; left: 50%; bottom: 0; z-index: 40; transform: translateX(-50%); width: min(560px, 100%); display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); padding: 6px 4px calc(10px + env(safe-area-inset-bottom)); background: color-mix(in srgb, var(--surface) 94%, transparent); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-top: 1px solid var(--line); }
 @media (min-width: 600px) { .tabbar { bottom: 12px; border: 0; border-radius: var(--r-sheet); box-shadow: var(--shadow-lg); padding-bottom: 8px; } }
-.tab { display: grid; justify-items: center; gap: 2px; min-height: 56px; padding-top: 4px; color: var(--ink-3); font-size: 0.75rem; font-weight: 600; text-decoration: none; transition: color var(--dur-fast) var(--ease-out); }
+.tab { display: grid; justify-items: center; gap: 2px; min-width: 0; min-height: 52px; padding-top: 2px; color: var(--ink-3); font-size: 0.6875rem; white-space: nowrap; font-weight: 600; text-decoration: none; transition: color var(--dur-fast) var(--ease-out); }
 .tab:active .tab-ic { transform: scale(0.92); }
-.tab-ic { display: grid; place-items: center; width: 52px; height: 30px; border-radius: var(--r-pill); transition: background-color var(--dur) var(--ease-out), transform var(--dur-press) var(--ease-out); }
-.tab-ic .ic { width: 22px; height: 22px; }
+.tab-ic { display: grid; place-items: center; width: 44px; height: 28px; border-radius: var(--r-pill); transition: background-color var(--dur) var(--ease-out), transform var(--dur-press) var(--ease-out); }
+.tab-ic .ic { width: 20px; height: 20px; }
+.tab > span:last-child { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .tab.on { color: var(--ink); }
 .tab.on .tab-ic { background: var(--dawn-soft); color: var(--dawn-ink); }
 </style>
