@@ -4,7 +4,7 @@ import { POSITIONS, exercises, exerciseById, firstSentence, howTo, misfit } from
 import { limbsOf } from "#shared/limbs";
 import { locale, type TextKey } from "#shared/i18n";
 import { can } from "#shared/permissions";
-import { planDiff, type PlanChange } from "#shared/planDiff";
+import { schedule, planDiff, type PlanChange } from "#shared/planDiff";
 import type { CareRole, Patient, Plan, PlanItem } from "#shared/model";
 
 // The plan (FIS-04) and its versions (FIS-05). The physio edits exercises and doses within the
@@ -26,9 +26,9 @@ const roleName = (r: string) => T(r === "doctor" ? "roleDoctor" : r === "physio"
 
 // ---- Editor: a working copy; the server confirms before it says "saved" (BUG-01) ----
 const editing = ref(false);
-const draft = reactive<{ items: PlanItem[]; note: string }>({ items: [], note: "" });
+const draft = reactive<{ items: PlanItem[]; note: string; perDay: number; daysPerWeek: number }>({ items: [], note: "", perDay: 1, daysPerWeek: 7 });
 function edit() {
-  Object.assign(draft, { items: plan.value.items.map((i) => ({ ...i })), note: plan.value.note });
+  Object.assign(draft, { items: plan.value.items.map((i) => ({ ...i })), note: plan.value.note, ...schedule(plan.value) });
   saveError.value = "";
   editing.value = true;
 }
@@ -56,6 +56,7 @@ const step = (i: PlanItem, field: "sets" | "reps", by: number) => {
   const max = field === "sets" ? maxSets.value : maxReps.value;
   i[field] = Math.min(max, Math.max(1, i[field] + by));
 };
+const scheduleText = useScheduleText();
 const changes = computed(() => (editing.value ? planDiff(plan.value, { ...plan.value, ...draft }) : []));
 const overLimit = computed(() => draft.items.some((i) => i.sets > maxSets.value || i.reps > maxReps.value));
 const saving = ref(false);
@@ -63,9 +64,9 @@ const saveError = ref("");
 async function save() {
   saving.value = true;
   saveError.value = "";
-  const before = { items: plan.value.items.map((i) => ({ ...i })), note: plan.value.note };
+  const before = { items: plan.value.items.map((i) => ({ ...i })), note: plan.value.note, ...schedule(plan.value) };
   try {
-    const saved = await api<Plan>(`/api/patients/${props.patient.id}/plan`, { method: "PUT", body: { items: draft.items, note: draft.note } });
+    const saved = await api<Plan>(`/api/patients/${props.patient.id}/plan`, { method: "PUT", body: { items: draft.items, note: draft.note, perDay: draft.perDay, daysPerWeek: draft.daysPerWeek } });
     editing.value = false;
     emit("reload");
     toast.show(T("crSavedAs", { v: saved.version }), {
@@ -98,6 +99,7 @@ function changeText(c: PlanChange) {
   if (c.kind === "removed") return `− ${name(c.exerciseId)}`;
   if (c.kind === "dose") return `${name(c.exerciseId)} · ${T(c.field === "sets" ? "sets" : "repsLabel")} ${c.from} → ${c.to}`;
   if (c.kind === "limit") return `${T(`crLimit_${c.field}` as TextKey)} ${c.from} → ${c.to}`;
+  if (c.kind === "schedule") return `${T(c.field === "perDay" ? "schedPerDay" : "schedDays")} ${c.from} → ${c.to}`;
   return `${T("noteToPatient")}: “${c.to || "–"}”`;
 }
 </script>
@@ -117,6 +119,7 @@ function changeText(c: PlanChange) {
           <span class="cr-dose" :class="{ over: i.sets > maxSets || i.reps > maxReps }">{{ T("setsReps", { sets: i.sets, reps: i.reps }) }}</span>
         </li>
       </ul>
+      <p class="cr-meta">{{ scheduleText(plan) }}</p>
       <p v-if="plan.note" class="cr-note-line">“{{ plan.note }}”</p>
       <p v-if="!canEdit" class="cr-lock"><Lock class="ic" aria-hidden="true" /> {{ T("setByPhysio") }}</p>
       <dl class="cr-limits">
@@ -166,6 +169,14 @@ function changeText(c: PlanChange) {
           <button type="button" class="ghost small-btn" @click="picking = false">{{ T("cancel") }}</button>
         </div>
       </template>
+      <div class="cr-sched">
+        <label class="field"><span>{{ T("schedPerDay") }}</span>
+          <select v-model.number="draft.perDay"><option v-for="n in 3" :key="n" :value="n">{{ T("schedTimes", { n }) }}</option></select>
+        </label>
+        <label class="field"><span>{{ T("schedDays") }}</span>
+          <select v-model.number="draft.daysPerWeek"><option v-for="n in 7" :key="n" :value="n">{{ n === 7 ? T("schedEveryDay") : T("schedNDays", { n }) }}</option></select>
+        </label>
+      </div>
       <label class="field">
         <span class="cr-top"><span>{{ T("noteToPatient") }}</span><span class="cr-meta">{{ draft.note.length }}/300</span></span>
         <textarea v-model="draft.note" rows="2" maxlength="300" />
@@ -201,6 +212,7 @@ function changeText(c: PlanChange) {
 </template>
 
 <style scoped>
+.cr-sched { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .cr-ex { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .cr-ex li { display: flex; justify-content: space-between; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--canvas); }
 .cr-dose { font-variant-numeric: tabular-nums; color: var(--ink-2); white-space: nowrap; }

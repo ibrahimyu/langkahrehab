@@ -38,10 +38,12 @@ export default defineEventHandler(async (event) => {
     if (maxReps && items.some((i) => i.reps > maxReps)) throw bad(`Above the doctor's limit: at most ${maxReps} reps.`);
   }
   const note = typeof body.note === "string" ? str(body.note, 300) : now.note;
+  const perDay = body.perDay === undefined ? now.perDay ?? 1 : Math.min(3, Math.max(1, Math.round(Number(body.perDay) || 1)));
+  const daysPerWeek = body.daysPerWeek === undefined ? now.daysPerWeek ?? 7 : Math.min(7, Math.max(1, Math.round(Number(body.daysPerWeek) || 7)));
   const painThreshold = body.painThreshold === undefined ? now.painThreshold : Math.min(10, Math.max(1, Math.round(Number(body.painThreshold) || now.painThreshold)));
   const reviewDate = typeof body.reviewDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.reviewDate) ? body.reviewDate : now.reviewDate;
 
-  if (!sameItems(items, now.items) || note !== now.note) assertCan(actor, "plan.exercises");
+  if (!sameItems(items, now.items) || note !== now.note || perDay !== (now.perDay ?? 1) || daysPerWeek !== (now.daysPerWeek ?? 7)) assertCan(actor, "plan.exercises");
   if (painThreshold !== now.painThreshold || reviewDate !== now.reviewDate || maxSets !== (now.maxSets ?? null) || maxReps !== (now.maxReps ?? null))
     assertCan(actor, "plan.limits");
 
@@ -50,6 +52,8 @@ export default defineEventHandler(async (event) => {
       version: p.plan.version + 1,
       items,
       note,
+      perDay,
+      daysPerWeek,
       painThreshold,
       reviewDate,
       maxSets,

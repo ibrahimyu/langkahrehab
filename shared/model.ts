@@ -77,6 +77,9 @@ export type Plan = {
   items: PlanItem[];
   /** Short note from the physio, shown to the patient. */
   note: string;
+  /** Physio: how often the whole plan is done. Missing = once a day, every day. */
+  perDay?: number;
+  daysPerWeek?: number;
   /** Doctor: pain after a session at or above this raises an alert. */
   painThreshold: number;
   /** Doctor: date (YYYY-MM-DD) of the next review visit. */

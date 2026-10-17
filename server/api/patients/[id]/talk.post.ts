@@ -1,5 +1,7 @@
 import { TALK_MAX_TURNS, TALK_SESSIONS_PER_DAY, companionSchema, parseCompanion, screenReply, type TalkMessage } from "#shared/companion";
+import { exerciseById } from "#shared/exercises";
 import { DAY, describeProfile, pickLang, str } from "#shared/model";
+import { schedule } from "#shared/planDiff";
 import { detectRedFlags } from "#shared/redflags";
 import { quoteFound } from "#shared/noteFilter";
 import { addAlerts, makeAlert } from "#shared/rules";
@@ -48,6 +50,12 @@ export default defineEventHandler(async (event) => {
     recentNotes: p.notes.filter((n) => !n.private).slice(-5).map((n) => ({ kind: n.kind, quote: n.quote, reply: n.reply })),
     lastSession: last ? { at: last.at.slice(0, 10), painAfter: last.painAfter, difficulty: last.difficulty, sessionsTotal: p.sessions.length } : null,
     exerciseTime: p.preferences.exerciseTime,
+    // So "how often should I exercise?" gets the physio's answer, not a guess.
+    plan: {
+      exercises: p.plan.items.map((i) => ({ name: exerciseById(i.exerciseId)?.name[lang] ?? i.exerciseId, sets: i.sets, reps: i.reps })),
+      ...schedule(p.plan),
+      noteFromPhysio: p.plan.note,
+    },
   };
   let raw: any;
   try {

@@ -82,6 +82,7 @@ const painList = computed(() => [...(p.value?.sessions ?? [])].reverse().slice(0
 const painPoints = computed(() => [...painList.value].reverse().map((s) => ({ id: s.id, at: s.at, before: s.painBefore, after: s.painAfter })));
 
 // ---- Now card, next step, other foot, and true moments of progress (PAS-01) ----
+const scheduleText = useScheduleText();
 const minutes = computed(() => (p.value ? planMinutes(p.value.plan.items) : 0));
 const exerciseNames = computed(() => (p.value?.plan.items ?? []).map((i) => exerciseById(i.exerciseId)?.name[lang.value]).filter(Boolean).join(", "));
 const next = computed(() => (p.value ? nextTarget(p.value.goals) : null));
@@ -105,7 +106,7 @@ const questionsWaiting = computed(() => (p.value?.notes ?? []).filter((n) => n.k
 const reader = useReadAloud();
 const readNow = () => {
   const q = p.value!;
-  reader.toggle([`${T("today")}: ${exerciseNames.value}. ${T("nowAbout", { n: minutes.value })}.`, q.plan.note ? `${T("note")}: ${q.plan.note}` : "", `${T("checkup")}: ${fmt(`${q.plan.reviewDate}T09:00:00`, { weekday: "long", day: "numeric", month: "long" })}.`].filter(Boolean).join(" "));
+  reader.toggle([`${T("today")}: ${exerciseNames.value}. ${T("nowAbout", { n: minutes.value })}, ${scheduleText(q.plan)}.`, q.plan.note ? `${T("note")}: ${q.plan.note}` : "", `${T("checkup")}: ${fmt(`${q.plan.reviewDate}T09:00:00`, { weekday: "long", day: "numeric", month: "long" })}.`].filter(Boolean).join(" "));
 };
 
 const asking = ref(false);
@@ -147,7 +148,7 @@ async function askCheckup() {
           </button>
         </div>
         <b class="now-title">{{ exerciseNames }}</b>
-        <span class="hint">{{ T("nowAbout", { n: minutes }) }}<template v-if="p.plan.note"> · “{{ p.plan.note }}”</template></span>
+        <span class="hint">{{ T("nowAbout", { n: minutes }) }} · {{ scheduleText(p.plan) }}<template v-if="p.plan.note"> · “{{ p.plan.note }}”</template></span>
         <button class="primary big-btn now-start" @click="emit('start')"><Play class="ic" aria-hidden="true" /> {{ T("start") }}</button>
       </div>
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeft, ChevronRight, Clock, Play } from "lucide-vue-next";
+import { ArrowLeft, CalendarClock, ChevronRight, Clock, Play } from "lucide-vue-next";
 import { exerciseById } from "#shared/exercises";
 import { planMinutes } from "#shared/home";
 import type { Patient } from "#shared/model";
@@ -32,6 +32,7 @@ const items = computed(() =>
     return [{ ...i, e, thumb: v ? thumbnailUrl(v) : null }];
   }),
 );
+const scheduleText = useScheduleText();
 const minutes = computed(() => (patient.value ? planMinutes(patient.value.plan.items) : 0));
 </script>
 
@@ -46,6 +47,7 @@ const minutes = computed(() => (patient.value ? planMinutes(patient.value.plan.i
         <p class="eyebrow">{{ T("sesToday") }}</p>
         <h1>{{ T("exCount", { n: items.length }) }}</h1>
         <p class="hint with-ic"><Clock class="ic" aria-hidden="true" /> {{ T("nowAbout", { n: minutes }) }}</p>
+        <p class="ex-sched"><CalendarClock class="ic" aria-hidden="true" /> {{ T("schedWhen") }}: <b>{{ scheduleText(patient.plan) }}</b></p>
       </header>
 
       <p v-if="!items.length" class="card">{{ T("exNone") }}</p>
@@ -73,6 +75,8 @@ const minutes = computed(() => (patient.value ? planMinutes(patient.value.plan.i
 .ex-loading { min-height: 240px; }
 .ex-head { display: grid; gap: 4px; }
 .ex-head h1 { font-size: clamp(1.5rem, 6vw, 2rem); }
+.ex-sched { display: flex; gap: 8px; align-items: center; margin: 4px 0 0; padding: 10px 12px; border-radius: 12px; background: var(--pine-soft); }
+.ex-sched .ic { color: var(--pine); flex: none; }
 .ex-items { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
 .ex-card { display: flex; gap: 12px; align-items: center; padding: 12px; border-radius: var(--r-card); background: var(--surface); box-shadow: var(--shadow-sm); color: var(--ink); text-decoration: none; transition: transform var(--dur-press) var(--ease-out); }
 .ex-card:active { transform: scale(0.98); }

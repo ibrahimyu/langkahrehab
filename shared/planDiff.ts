@@ -8,9 +8,13 @@ export type PlanChange =
   | { kind: "removed"; exerciseId: string }
   | { kind: "dose"; exerciseId: string; field: "sets" | "reps"; from: number; to: number }
   | { kind: "limit"; field: "painThreshold" | "reviewDate" | "maxSets" | "maxReps"; from: string; to: string }
-  | { kind: "note"; from: string; to: string };
+  | { kind: "note"; from: string; to: string }
+  | { kind: "schedule"; field: "perDay" | "daysPerWeek"; from: number; to: number };
 
-type PlanLike = Pick<Plan, "items" | "note" | "painThreshold" | "reviewDate"> & Partial<Pick<Plan, "maxSets" | "maxReps">>;
+type PlanLike = Pick<Plan, "items" | "note" | "painThreshold" | "reviewDate"> & Partial<Pick<Plan, "maxSets" | "maxReps" | "perDay" | "daysPerWeek">>;
+
+/** How often the plan is done: once a day, every day, unless the physio set otherwise. */
+export const schedule = (p: Partial<Pick<Plan, "perDay" | "daysPerWeek">>) => ({ perDay: p.perDay ?? 1, daysPerWeek: p.daysPerWeek ?? 7 });
 
 export function planDiff(before: PlanLike, after: PlanLike): PlanChange[] {
   const out: PlanChange[] = [];
@@ -31,5 +35,8 @@ export function planDiff(before: PlanLike, after: PlanLike): PlanChange[] {
     if (a !== b) out.push({ kind: "limit", field, from: a, to: b });
   }
   if (before.note !== after.note) out.push({ kind: "note", from: before.note, to: after.note });
+  const a = schedule(before);
+  const b = schedule(after);
+  for (const field of ["perDay", "daysPerWeek"] as const) if (a[field] !== b[field]) out.push({ kind: "schedule", field, from: a[field], to: b[field] });
   return out;
 }

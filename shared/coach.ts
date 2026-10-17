@@ -2,6 +2,7 @@
 // and locked into the one-use Live token, so the browser cannot change what the coach is told.
 
 import { exerciseById, howTo, type Exercise, type Lang } from "./exercises";
+import { schedule } from "./planDiff";
 import { CONCERNS, DIARY_KINDS, MEMORY_KINDS, describeProfile, type CountMode, type Patient } from "./model";
 
 export type CoachOptions = {
@@ -66,7 +67,7 @@ ${language[lang]} ${SIMPLE} Keep each turn to one or two short sentences. After 
 About the patient, entered by their doctor: ${describeProfile(p.profile)}
 Name the side when you explain, for example "your left leg", instead of "the amputated leg". Never ask about their amputation details; the doctor already recorded them. Respect any restrictions.
 
-Today's plan (version ${p.plan.version}), set by the physiotherapist. Do the exercises in this order and never change them:
+Today's plan (version ${p.plan.version}), set by the physiotherapist, done ${schedule(p.plan).perDay} time(s) a day, ${schedule(p.plan).daysPerWeek} day(s) a week. Do the exercises in this order and never change them:
 ${items}${p.plan.note ? `\nNote from the physiotherapist: ${p.plan.note}` : ""}
 
 What you remember about this patient from earlier sessions and the care team. Use it to personalise and encourage, for example mention their goal once. Never invent other facts about them:
