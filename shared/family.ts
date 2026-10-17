@@ -231,7 +231,19 @@ export { templateById };
 
 // ---- What the family sees (KEL-01, ROL-06) ----
 
-export type WeekFacts = { days: number; pain: PainWord | null; nextVisit: string | null };
+export type WeekFacts = {
+  days: number;
+  pain: PainWord | null;
+  nextVisit: string | null;
+  /** The last 7 days, oldest first: the date and whether there was a session. */
+  dayList?: { date: string; done: boolean }[];
+  /** Reps done in the last 7 days. */
+  reps?: number;
+  /** Pain after exercise at the end of the week compared with the start. */
+  painTrend?: "easier" | "same" | "harder" | null;
+  /** Family tasks finished in the last 7 days. */
+  tasksDone?: number;
+};
 
 export type FamilyView = {
   id: string;
@@ -254,10 +266,18 @@ export function weekFacts(p: Patient, now: number): WeekFacts {
   const since = now - 7 * DAY;
   const recent = p.sessions.filter((s) => Date.parse(s.at) >= since && Date.parse(s.at) <= now);
   const pains = recent.map((s) => s.painAfter).filter((v): v is number => v !== null);
+  const done = new Set(recent.map((s) => dayKey(Date.parse(s.at))));
+  const today = dayKey(now);
+  const first = pains[0];
+  const last = pains.at(-1);
   return {
-    days: new Set(recent.map((s) => dayKey(Date.parse(s.at)))).size,
+    days: done.size,
     pain: painWord(pains.length ? Math.round(pains.reduce((a, b) => a + b, 0) / pains.length) : null),
     nextVisit: nextVisit(p, now)?.date ?? null,
+    dayList: Array.from({ length: 7 }, (_, i) => addDays(today, i - 6)).map((date) => ({ date, done: done.has(date) })),
+    reps: recent.reduce((n, s) => n + s.exercises.reduce((m, e) => m + e.logged.reduce<number>((a, b) => a + (b ?? 0), 0), 0), 0),
+    painTrend: pains.length < 2 || first === undefined || last === undefined ? null : last < first ? "easier" : last > first ? "harder" : "same",
+    tasksDone: p.familyTasks.filter((t) => t.doneAt && Date.parse(t.doneAt) >= since).length,
   };
 }
 
@@ -293,6 +313,18 @@ export function familyView(p: Patient, now: number): FamilyView {
 }
 
 /** This week's news from numbers only (KEL-04 fallback; the AI version must say the same). */
+/** The week as plain lines for sharing: the numbers first, so the message is useful on its own. */
+export function weeklyShare(name: string, w: WeekFacts, lang: Lang, dateText: (d: string) => string, dayName: (d: string) => string, news: string) {
+  const lines = [t(lang, "famShareHead", { name })];
+  const days = (w.dayList ?? []).filter((d) => d.done).map((d) => dayName(d.date)).join(", ");
+  lines.push(`• ${t(lang, "famNewsDays", { name, n: w.days })}${days ? ` (${days})` : ""}`);
+  if (w.reps) lines.push(`• ${t(lang, "famWeekReps", { n: w.reps })}`);
+  if (w.pain) lines.push(`• ${t(lang, "famNewsPain", { pain: t(lang, `painWord_${w.pain}` as TextKey) })}${w.painTrend ? ` (${t(lang, `famTrend_${w.painTrend}` as TextKey)})` : ""}`);
+  if (w.tasksDone) lines.push(`• ${t(lang, "famWeekTasks", { n: w.tasksDone })}`);
+  if (w.nextVisit) lines.push(`• ${t(lang, "famNewsVisit", { date: dateText(w.nextVisit) })}`);
+  return [...lines, "", news, "— Langkah"].join("\n");
+}
+
 export function weeklyNews(name: string, w: WeekFacts, lang: Lang, dateText: (d: string) => string) {
   const parts = [w.days ? t(lang, "famNewsDays", { name, n: w.days }) : t(lang, "famNewsNoDays", { name })];
   if (w.pain) parts.push(t(lang, "famNewsPain", { pain: t(lang, `painWord_${w.pain}` as TextKey) }));

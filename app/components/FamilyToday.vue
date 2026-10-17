@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ArrowRight, Bell, CalendarDays, CheckCircle2, ChevronRight, CircleDot, Heart, Info, ListChecks, PhoneCall, RotateCw, Volume2, VolumeX } from "lucide-vue-next";
-import { weeklyNews, textOf, byTaskOrder, reminderDue, returnSoon } from "#shared/family";
+import { ArrowRight, Bell, CalendarDays, Check, CheckCircle2, ChevronRight, CircleDot, Heart, Info, ListChecks, PhoneCall, RotateCw, Volume2, VolumeX } from "lucide-vue-next";
+import { weeklyNews, weeklyShare, textOf, byTaskOrder, reminderDue, returnSoon } from "#shared/family";
+import { locale } from "#shared/i18n";
 import { dayKey } from "#shared/calendar";
 import type { TextKey } from "#shared/i18n";
 
@@ -60,6 +61,8 @@ const reminders = computed(() => {
 
 // This week's news: the saved update (AI or care team), or the same facts from the template.
 const news = computed(() => v.value.update?.text || weeklyNews(v.value.name, v.value.week, lang.value, dayText));
+const dayName = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString(locale(lang.value), { weekday: "short" });
+const shareText = computed(() => weeklyShare(v.value.name, v.value.week, lang.value, dayText, dayName, news.value));
 const refreshing = ref(false);
 async function refresh() {
   refreshing.value = true;
@@ -122,9 +125,22 @@ async function refresh() {
         <h2><CalendarDays class="ic" aria-hidden="true" /> {{ T("famThisWeek") }}</h2>
         <button class="ghost small-btn" :disabled="refreshing" @click="refresh"><RotateCw class="ic" :class="{ spin: refreshing }" aria-hidden="true" /> {{ T("famNewsRefresh") }}</button>
       </header>
+      <!-- The week in numbers, then the words -->
+      <ol v-if="v.week.dayList" class="week-days" :aria-label="T('famNewsDays', { name: v.name, n: v.week.days })">
+        <li v-for="d in v.week.dayList" :key="d.date" :class="{ done: d.done }">
+          <span class="week-dot" aria-hidden="true"><Check v-if="d.done" class="ic" /></span>
+          <span class="week-day">{{ dayName(d.date) }}</span>
+        </li>
+      </ol>
+      <dl class="week-stats">
+        <div><dt>{{ T("famStatDays") }}</dt><dd>{{ v.week.days }}/7</dd></div>
+        <div><dt>{{ T("famStatReps") }}</dt><dd>{{ v.week.reps ?? 0 }}</dd></div>
+        <div><dt>{{ T("famStatPain") }}</dt><dd>{{ v.week.pain ? T(`painWord_${v.week.pain}` as TextKey) : "–" }}<small v-if="v.week.painTrend"> · {{ T(`famTrend_${v.week.painTrend}` as TextKey) }}</small></dd></div>
+        <div><dt>{{ T("famStatTasks") }}</dt><dd>{{ v.week.tasksDone ?? 0 }}</dd></div>
+      </dl>
       <p class="week-text">{{ news }}</p>
       <div class="controls">
-        <FamilyShare :text="`${news}\n— Langkah`" small />
+        <FamilyShare :text="shareText" small />
       </div>
     </article>
 
@@ -171,7 +187,18 @@ async function refresh() {
 .my-tasks-text .hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .week-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .week-head h2 { display: inline-flex; align-items: center; gap: 8px; font-size: 1.125rem; }
-.week-text { font-size: 1.0625rem; line-height: 1.55; }
+.week-text { font-size: 1rem; line-height: 1.55; }
+.week-days { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.week-days li { display: grid; justify-items: center; gap: 4px; }
+.week-dot { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--sunken); color: var(--surface); }
+.week-dot .ic { width: 16px; height: 16px; }
+.week-days .done .week-dot { background: var(--pine); }
+.week-day { font-size: 0.75rem; color: var(--ink-3); }
+.week-stats { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.week-stats div { padding: 10px 12px; border-radius: 12px; background: var(--sunken); }
+.week-stats dt { font-size: 0.8125rem; color: var(--ink-2); }
+.week-stats dd { margin: 0; font: 700 1.25rem/1.2 var(--display); }
+.week-stats small { font: 600 0.8125rem var(--body, inherit); color: var(--ink-2); }
 .spin { animation: spin 0.9s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }

@@ -23,7 +23,7 @@ export default defineEventHandler(async (event) => {
   if (useRuntimeConfig().geminiApiKey) {
     try {
       await aiBudget(event, "family");
-      const facts = { name: patient.name, daysExercisedOfLast7: w.days, painAfterExercise: w.pain, nextVisit: w.nextVisit ? dateText(w.nextVisit) : null };
+      const facts = { name: patient.name, daysExercisedOfLast7: w.days, repsThisWeek: w.reps ?? 0, painAfterExercise: w.pain, painComparedWithStartOfWeek: w.painTrend ?? null, familyTasksDone: w.tasksDone ?? 0, nextVisit: w.nextVisit ? dateText(w.nextVisit) : null };
       const response = await gemini().models.generateContent({
         model: useRuntimeConfig().textModel,
         contents: [{ role: "user", parts: [{ text: `Facts (JSON): ${JSON.stringify(facts)}\nSame facts as plain sentences: ${text}` }] }],
