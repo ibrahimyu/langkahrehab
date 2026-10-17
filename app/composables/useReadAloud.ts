@@ -21,5 +21,14 @@ export function useReadAloud() {
     speaking.value = true;
     speechSynthesis.speak(u);
   }
-  return { speaking, supported, toggle };
+  /** Speaks a short cue now, cutting off any cue still playing. */
+  function speak(text: string) {
+    if (!supported.value || !text) return;
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = locale(lang.value);
+    u.rate = 0.95;
+    speechSynthesis.speak(u);
+  }
+  return { speaking, supported, toggle, speak };
 }

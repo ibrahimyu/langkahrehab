@@ -235,7 +235,7 @@ async function askCheckup() {
       <ul class="detail-list">
         <li v-for="item in p.plan.items" :key="item.exerciseId">
           <ExerciseVideoButton :exercise-id="item.exerciseId" :level="p.profile.level" />
-          <span class="detail-main"><b>{{ exerciseById(item.exerciseId)?.name[lang] }}</b><span class="hint">{{ T("setsReps", { sets: item.sets, reps: item.reps }) }}</span></span>
+          <NuxtLink :to="`/patient/${patientId}/exercise/${item.exerciseId}`" class="detail-main"><b>{{ exerciseById(item.exerciseId)?.name[lang] }}</b><span class="hint">{{ T("setsReps", { sets: item.sets, reps: item.reps }) }} · {{ T("howToDo") }} →</span></NuxtLink>
         </li>
       </ul>
       <p v-if="p.plan.note" class="note">“{{ p.plan.note }}”</p>

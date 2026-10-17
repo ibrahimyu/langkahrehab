@@ -3,7 +3,7 @@ import { Camera, Lock, Mic, ShieldCheck, Smartphone } from "lucide-vue-next";
 
 // UXA-07: say why before the browser asks, and help when it was refused.
 // `ask()` resolves true when the session may start (permission granted or about to be asked).
-const props = defineProps<{ camera: boolean }>();
+const props = withDefaults(defineProps<{ camera: boolean; mic?: boolean }>(), { mic: true });
 const emit = defineEmits<{ go: []; withoutCamera: [] }>();
 const T = useT();
 const step = ref<"explain" | "denied" | null>(null);
@@ -17,13 +17,13 @@ async function state(name: string) {
 }
 /** Called by the Start button. */
 async function ask() {
-  const states = await Promise.all([state("microphone"), props.camera ? state("camera") : Promise.resolve("granted")]);
+  const states = await Promise.all([props.mic ? state("microphone") : Promise.resolve("granted"), props.camera ? state("camera") : Promise.resolve("granted")]);
   if (states.every((s) => s === "granted")) return emit("go");
   step.value = states.includes("denied") ? "denied" : "explain";
 }
 async function allow() {
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: props.camera });
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: props.mic, video: props.camera });
     stream.getTracks().forEach((t) => t.stop());
     step.value = null;
     emit("go");
@@ -38,10 +38,10 @@ const ios = computed(() => import.meta.client && /iphone|ipad|ipod/i.test(naviga
 <template>
   <UiSheet :open="step === 'explain'" :title="T('permTitle')" @close="step = null">
     <div class="stack">
-      <p class="perm-row"><Mic class="ic" aria-hidden="true" /> {{ T("permMic") }}</p>
+      <p v-if="mic" class="perm-row"><Mic class="ic" aria-hidden="true" /> {{ T("permMic") }}</p>
       <p v-if="camera" class="perm-row"><Camera class="ic" aria-hidden="true" /> {{ T("permCamera") }}</p>
       <p class="perm-row"><ShieldCheck class="ic" aria-hidden="true" /> {{ T("permPrivate") }}</p>
-      <button class="primary big-btn" @click="allow">{{ camera ? T("permAllowBoth") : T("permAllowMic") }}</button>
+      <button class="primary big-btn" @click="allow">{{ camera && mic ? T("permAllowBoth") : camera ? T("permAllowCamera") : T("permAllowMic") }}</button>
     </div>
   </UiSheet>
   <UiSheet :open="step === 'denied'" :title="T('permDeniedTitle')" @close="step = null">
@@ -58,7 +58,7 @@ const ios = computed(() => import.meta.client && /iphone|ipad|ipod/i.test(naviga
         <li><ShieldCheck class="ic" aria-hidden="true" /> {{ T("permReload") }}</li>
       </ol>
       <button class="primary big-btn" @click="allow">{{ T("tryAgain") }}</button>
-      <button v-if="camera" class="ghost big-btn" @click="step = null; emit('withoutCamera')">{{ T("permNoCamera") }}</button>
+      <button v-if="camera && mic" class="ghost big-btn" @click="step = null; emit('withoutCamera')">{{ T("permNoCamera") }}</button>
     </div>
   </UiSheet>
 </template>
