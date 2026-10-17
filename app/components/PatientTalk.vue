@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { Archive, Bot, Check, ChevronRight, HeartHandshake, History, MessageSquarePlus, MoonStar, Phone, PhoneCall, Send, ShieldAlert, Trash2, X } from "lucide-vue-next";
+import { Archive, AudioLines, Bot, Check, ChevronRight, HeartHandshake, History, MessageSquarePlus, Mic, MicOff, MoonStar, Phone, PhoneCall, Send, ShieldAlert, Square, Trash2, X } from "lucide-vue-next";
+import { detectRedFlags, SpeechWindow } from "#shared/redflags";
+import { defaultSettings, parseSettings } from "#shared/settings";
+import type { LiveGrant } from "../composables/useLiveCoach";
 import { locale, type TextKey } from "#shared/i18n";
 import type { Goal, Note, Patient, Preferences } from "#shared/model";
 import { isLate, type Proposal, type ReplyIssue, type TalkMessage } from "#shared/companion";
@@ -144,6 +147,54 @@ async function send(text = draft.value, via: "text" | "voice" = "text") {
   }
 }
 
+// ---- Talk by voice (Gemini Live): it answers aloud, and knows when you have finished speaking ----
+// Every sentence the patient says is checked for danger signs first; a match ends the voice chat and
+// goes through the same safety net as typed Talk (crisis screen, alert to the care team).
+const voiceOn = ref(false);
+const heard = new SpeechWindow(10_000);
+let shown = 0;
+const voice = useLiveCoach({
+  fetchGrant: () => api<LiveGrant>(`/api/patients/${props.patientId}/talk-live`, { method: "POST", body: { lang: lang.value } }),
+  onTool: (name, args) => {
+    if (name !== "share_with_team") return { ok: false, error: "Unknown tool." };
+    api<{ notes: Note[] }>(`/api/patients/${props.patientId}/notes`, { method: "POST", body: { kind: args.kind, quote: args.quote, summary: args.summary, source: "companion", via: "voice" } })
+      .then((r) => patient.value && (patient.value.notes = r.notes))
+      .catch(() => {});
+    return { ok: true };
+  },
+  onInput: (text) => {
+    const window = heard.push(text, Date.now());
+    if (!detectRedFlags(window, lang.value)) return;
+    stopVoice();
+    void send(window, "voice");
+  },
+});
+// The spoken turns become bubbles, so a voice chat can be read back, kept or deleted like a typed one.
+watch(
+  () => voice.lines.value.length,
+  (n) => {
+    for (const line of voice.lines.value.slice(shown, n)) {
+      if (line.role === "app" || !line.text.trim()) continue;
+      bubbles.value.push({ role: line.role === "patient" ? "user" : "model", text: line.text.trim() });
+    }
+    shown = n;
+    scrollDown();
+  },
+);
+async function startVoice() {
+  shown = 0;
+  voiceOn.value = true;
+  await voice.start(parseSettings({ ...defaultSettings, turn: { ...defaultSettings.turn, kind: "auto", silenceMs: 1200, endSensitivity: "low" } }));
+}
+function stopVoice() {
+  voice.stop();
+  voiceOn.value = false;
+}
+const voiceState = computed(() => (voice.state.value === "connecting" ? "connecting" : voice.userSpeaking.value ? "you" : voice.state.value === "speaking" ? "speaking" : "listening"));
+watch(voice.state, (st) => {
+  if (st === "error" || st === "ended") voiceOn.value = false;
+});
+
 // ---- Proposed changes: confirm, then undo from the toast ----
 const proposalText = (p: Proposal) =>
   p.tool === "set_exercise_time" ? p.time : p.tool === "update_contact" ? [p.phone, p.email].filter(Boolean).join(" · ") : p.text;
@@ -254,13 +305,26 @@ async function accept(item: { p: Proposal; state: string }) {
         <li v-if="sending" class="bubble-row model"><div class="bubble typing">{{ T("talkThinking") }}</div></li>
       </ol>
 
-      <form class="composer" @submit.prevent="send()">
-        <textarea v-model="draft" rows="2" maxlength="600" :placeholder="T('talkPlaceholder')" :aria-label="T('talkPlaceholder')" @keydown.enter.exact.prevent="send()" />
-        <div class="controls">
-          <UiMicButton @text="(v) => send(v, 'voice')" />
-          <button class="primary" :disabled="!draft.trim() || sending || !patient"><Send class="ic" aria-hidden="true" /> {{ T("send") }}</button>
+      <!-- Voice: speak, and Langkah answers aloud -->
+      <section v-if="voiceOn" class="voice-panel" aria-live="polite">
+        <span class="voice-orb" :class="`st-${voiceState}`" aria-hidden="true"><AudioLines class="ic" /></span>
+        <b class="voice-state">{{ T(`talkVoice_${voiceState}`) }}</b>
+        <p v-if="voice.caption.value && voiceState === 'speaking'" class="voice-caption">{{ voice.caption.value }}</p>
+        <div class="voice-actions">
+          <button class="ghost big-btn" @click="voice.toggleMic()"><component :is="voice.micOn.value ? MicOff : Mic" class="ic" aria-hidden="true" /> {{ voice.micOn.value ? T("mute") : T("unmute") }}</button>
+          <button class="primary big-btn" @click="stopVoice"><Square class="ic" aria-hidden="true" /> {{ T("talkVoiceEnd") }}</button>
         </div>
-      </form>
+      </section>
+      <template v-else>
+        <p v-if="voice.error.value" class="error">{{ voice.error.value }}</p>
+        <button class="voice-start" :disabled="!patient" @click="startVoice"><AudioLines class="ic" aria-hidden="true" /> {{ T("talkVoiceStart") }}</button>
+        <form class="composer" @submit.prevent="send()">
+          <textarea v-model="draft" rows="2" maxlength="600" :placeholder="T('talkPlaceholderType')" :aria-label="T('talkPlaceholderType')" @keydown.enter.exact.prevent="send()" />
+          <div class="controls">
+            <button class="primary" :disabled="!draft.trim() || sending || !patient"><Send class="ic" aria-hidden="true" /> {{ T("send") }}</button>
+          </div>
+        </form>
+      </template>
     </template>
 
     <UiSheet :open="ending" :title="T('talkEndTitle')" @close="ending = false">
@@ -301,3 +365,19 @@ async function accept(item: { p: Proposal; state: string }) {
 </template>
 
 <style scoped src="~/assets/css/talk.css"></style>
+<style scoped>
+.voice-start { display: flex; gap: 10px; align-items: center; justify-content: center; min-height: 56px; border-radius: var(--r-pill); border: 0; background: var(--pine); color: var(--surface); font: inherit; font-weight: 700; cursor: pointer; transition: transform var(--dur-press) var(--ease-out); }
+.voice-start:active { transform: scale(0.98); }
+.voice-panel { display: grid; justify-items: center; gap: 12px; padding: 20px 16px; border-radius: var(--r-sheet); background: var(--night); color: var(--on-night); }
+.voice-orb { display: grid; place-items: center; width: 96px; height: 96px; border-radius: 50%; background: var(--night-raised); color: var(--on-night); transition: transform var(--dur) var(--ease-out), background-color var(--dur) var(--ease-out); }
+.voice-orb .ic { width: 40px; height: 40px; }
+.voice-orb.st-you { background: var(--dawn); color: var(--ink); transform: scale(1.08); }
+.voice-orb.st-speaking { background: var(--pine); animation: voice-pulse 1.4s ease-in-out infinite; }
+.voice-orb.st-connecting { opacity: 0.6; }
+@keyframes voice-pulse { 50% { transform: scale(1.06); } }
+@media (prefers-reduced-motion: reduce) { .voice-orb.st-speaking { animation: none; } }
+.voice-state { font-size: 1.0625rem; }
+.voice-caption { margin: 0; max-width: 32ch; text-align: center; color: var(--on-night-2); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.voice-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; }
+.voice-actions .big-btn { display: flex; gap: 6px; align-items: center; justify-content: center; }
+</style>
