@@ -30,7 +30,7 @@ export const VOICES = ["Aoede", "Kore", "Leda", "Zephyr", "Puck", "Charon", "Oru
 
 export const defaultSettings: Settings = {
   mode: "camera",
-  turn: { kind: "app", silenceMs: 700, inSetSilenceMs: 3000, threshold: 0.02, endSensitivity: "default" },
+  turn: { kind: "app", silenceMs: 1300, inSetSilenceMs: 3000, threshold: 0.02, endSensitivity: "default" },
   bargeIn: true,
   askDiary: true,
   voice: "Aoede",
@@ -55,7 +55,8 @@ export function parseSettings(input: unknown): Settings {
     mode: pick(s.mode, ["camera", "patient", "coach"] as const, d.mode),
     turn: {
       kind: pick(t.kind, ["auto", "app"] as const, d.turn.kind),
-      silenceMs: int(t.silenceMs, 200, 5000, d.turn.silenceMs),
+      // People who are tired or in pain pause mid-sentence: never end a turn after less than a second.
+      silenceMs: int(t.silenceMs, 1000, 5000, d.turn.silenceMs),
       inSetSilenceMs: int(t.inSetSilenceMs, 500, 10000, d.turn.inSetSilenceMs),
       threshold: Number.isFinite(threshold) ? Math.min(0.3, Math.max(0.002, threshold)) : d.turn.threshold,
       endSensitivity: pick(t.endSensitivity, ["default", "low", "high"] as const, d.turn.endSensitivity),

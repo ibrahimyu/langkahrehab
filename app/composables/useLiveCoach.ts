@@ -12,7 +12,12 @@ const endpoint =
 /** Chunks of microphone audio kept before detected speech, so its start is not cut off (8 × 40 ms). */
 const PREROLL_CHUNKS = 8;
 /** While the coach is talking, speech must be this much louder to count (echo that leaks through). */
-const DUCK_SCALE = 2.5;
+const DUCK_SCALE = 4;
+/** Speech must last this many 40 ms chunks to count: about 0.24 s normally, 0.6 s to interrupt the coach. */
+const START_CHUNKS = 6;
+const BARGE_IN_CHUNKS = 15;
+/** The phone's own speaker still echoes for a moment after the coach stops. */
+const ECHO_TAIL_MS = 500;
 /** Hangover for the metrics-only detector in auto turn mode. */
 const METRICS_HANGOVER_MS = 300;
 
@@ -65,6 +70,7 @@ export function useLiveCoach(handlers: {
   let out: AudioContext | undefined;
   let sources: AudioBufferSourceNode[] = [];
   let playAt = 0;
+  let lastPlaybackEnd = 0;
   let expiry: ReturnType<typeof setTimeout> | undefined;
   let input = "";
   let output = "";
@@ -114,6 +120,7 @@ export function useLiveCoach(handlers: {
     sources.push(src);
     src.onended = () => {
       sources = sources.filter((s) => s !== src);
+      if (!sources.length) lastPlaybackEnd = performance.now();
       if (!sources.length && state.value === "speaking") state.value = "listening";
     };
     state.value = "speaking";
@@ -205,7 +212,9 @@ export function useLiveCoach(handlers: {
     micLevel.value = level;
     const now = performance.now();
     vad.hangoverMs = hangover();
-    vad.scale = sources.length ? DUCK_SCALE : 1;
+    const coachAudible = sources.length > 0 || now - lastPlaybackEnd < ECHO_TAIL_MS;
+    vad.scale = coachAudible ? DUCK_SCALE : 1;
+    vad.startChunks = coachAudible ? BARGE_IN_CHUNKS : START_CHUNKS;
     const ev = micOn.value ? vad.push(level, now) : null;
 
     if (ev === "start") {
