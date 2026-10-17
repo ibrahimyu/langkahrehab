@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowRight, Bell, CalendarDays, Check, CheckCircle2, ChevronRight, CircleDot, Heart, Info, ListChecks, PhoneCall, RotateCw, Volume2, VolumeX } from "lucide-vue-next";
+import { ArrowRight, Bell, FileText, CalendarDays, Check, CheckCircle2, ChevronRight, CircleDot, Heart, Info, ListChecks, PhoneCall, RotateCw, Volume2, VolumeX } from "lucide-vue-next";
 import { weeklyNews, weeklyShare, textOf, byTaskOrder, reminderDue, returnSoon } from "#shared/family";
 import { locale } from "#shared/i18n";
 import { dayKey } from "#shared/calendar";
@@ -107,6 +107,12 @@ async function refresh() {
         <b>{{ T("remToday") }}</b>
         <span v-for="t in reminders" :key="t.id" class="hint">{{ t.sourcing?.status === "borrowed" && t.sourcing.returnBy ? T("navReturnSoon", { item: textOf(t.title, lang), from: t.sourcing.from || "—", date: dayText(t.sourcing.returnBy) }) : textOf(t.title, lang) }}<template v-if="t.reminder"> · {{ t.reminder.time }}</template></span>
       </span>
+      <ArrowRight class="ic chev" aria-hidden="true" />
+    </NuxtLink>
+
+    <NuxtLink v-if="v.letterExplanation" :to="`/family/${patientId}/letter`" class="card my-tasks">
+      <span class="my-tasks-ic" aria-hidden="true"><FileText class="ic" /></span>
+      <span class="my-tasks-text"><b>{{ T("letTitleFam") }}</b><span class="hint">{{ v.letterExplanation.what }}</span></span>
       <ArrowRight class="ic chev" aria-hidden="true" />
     </NuxtLink>
 

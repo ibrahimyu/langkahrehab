@@ -16,13 +16,17 @@ const lang = useLang();
 const toast = useToast();
 
 const intake = ref<Intake | null>(null);
-const letter = ref<{ image: string; by: string | null; patientName: string } | null>(null);
+const letter = ref<{ image: string; pages: string[]; by: string | null; patientName: string } | null>(null);
 const loadError = ref("");
 const values = reactive<Record<IntakeField, string | number | null>>(Object.fromEntries(INTAKE_FIELDS.map((f) => [f, null])) as Record<IntakeField, string | number | null>);
 const family = ref<{ name: string; relation: (typeof FAMILY_RELATIONS)[number]; livesWithPatient: boolean }[]>([]);
 const tasks = ref<{ title: string; detail: string; item: boolean; selected: boolean }[]>([]);
+// The explanation for the patient and family; lists are edited one point per line.
+const explain = reactive({ what: "", homeCare: "", warningSigns: "", visits: "" });
+const toLines = (t: string) => t.split("\n").map((x) => x.trim()).filter(Boolean);
 const images = useLetterImages();
-const photo = computed(() => letter.value?.image || images.value[id] || "");
+const photos = computed(() => (letter.value?.pages ?? (images.value[id] ? [images.value[id]] : [])).filter((x) => x.startsWith("data:image")));
+const pdfPages = computed(() => (letter.value?.pages ?? []).filter((x) => x.startsWith("data:application/pdf")).length);
 
 async function load() {
   loadError.value = "";
@@ -33,6 +37,8 @@ async function load() {
     for (const f of INTAKE_FIELDS) values[f] = r.intake.fields[f].value;
     family.value = r.intake.family.map((m) => ({ ...m }));
     tasks.value = (r.intake.suggestedTasks ?? []).map((x) => ({ ...x }));
+    const e = r.intake.explanation;
+    Object.assign(explain, { what: e?.what ?? "", homeCare: (e?.homeCare ?? []).join("\n"), warningSigns: (e?.warningSigns ?? []).join("\n"), visits: (e?.visits ?? []).join("\n") });
   } catch (e) {
     loadError.value = errorMessage(e);
   }
@@ -51,6 +57,7 @@ const body = () => ({
   values: Object.fromEntries(INTAKE_FIELDS.map((f) => [f, values[f] === "" ? null : values[f]])),
   family: family.value.filter((m) => m.name.trim()),
   tasks: tasks.value,
+  explanation: { what: explain.what, homeCare: toLines(explain.homeCare), warningSigns: toLines(explain.warningSigns), visits: toLines(explain.visits) },
 });
 
 const busy = ref(false);
@@ -117,8 +124,9 @@ const dateText = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString(lan
         </p>
       </header>
 
-      <figure v-if="photo" class="ik-photo">
-        <img :src="photo" alt="" />
+      <figure v-if="photos.length || pdfPages" class="ik-photo">
+        <img v-for="(src, i) in photos" :key="i" :src="src" alt="" />
+        <span v-if="pdfPages" class="pill"><FileText class="ic" aria-hidden="true" /> PDF · {{ pdfPages }}</span>
         <figcaption v-if="letter?.by" class="cr-meta">{{ T("ikLetterFrom", { name: letter.by }) }}</figcaption>
       </figure>
 
@@ -144,6 +152,15 @@ const dateText = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString(lan
         <h2 class="cr-h"><Pill class="ic" aria-hidden="true" /> {{ T("ikMeds") }}</h2>
         <ul><li v-for="(m, i) in intake.medicationsMentioned" :key="i">{{ m }}</li></ul>
         <p class="cr-meta">{{ T("ikMedsNote") }}</p>
+      </section>
+
+      <section class="card ik-explain">
+        <h2 class="cr-h"><Sparkles class="ic" aria-hidden="true" /> {{ T("ikExplain") }}</h2>
+        <p class="cr-meta">{{ T("ikExplainNote") }}</p>
+        <label class="field"><span>{{ T("letWhat") }}</span><textarea v-model="explain.what" rows="3" maxlength="600" /></label>
+        <label class="field"><span>{{ T("letHome") }} · <span class="cr-meta">{{ T("ikExplainOneLine") }}</span></span><textarea v-model="explain.homeCare" rows="4" /></label>
+        <label class="field"><span>{{ T("letWarn") }} · <span class="cr-meta">{{ T("ikExplainOneLine") }}</span></span><textarea v-model="explain.warningSigns" rows="4" /></label>
+        <label class="field"><span>{{ T("letVisits") }} · <span class="cr-meta">{{ T("ikExplainOneLine") }}</span></span><textarea v-model="explain.visits" rows="3" /></label>
       </section>
 
       <section class="card ik-tasks">
@@ -193,7 +210,8 @@ const dateText = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString(lan
 .ik-field.unsure input, .ik-field.unsure select, .ik-field.unsure textarea { border-color: var(--dawn); background: color-mix(in srgb, var(--dawn-soft) 50%, var(--surface)); }
 .ik-check { background: var(--dawn-soft); color: var(--ink); }
 .ik-meds ul { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
-.ik-tasks, .ik-family, .ik-meds { display: grid; gap: 10px; }
+.ik-tasks, .ik-family, .ik-meds, .ik-explain { display: grid; gap: 10px; }
+.ik-explain textarea { width: 100%; }
 .ik-task { display: flex; gap: 10px; align-items: flex-start; padding: 10px; border-radius: 12px; background: var(--sunken); cursor: pointer; }
 .ik-task.off { opacity: 0.6; }
 .ik-task > input { margin-top: 6px; }

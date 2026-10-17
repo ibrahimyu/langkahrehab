@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Sparkles, Target, ChevronRight, HeartHandshake, Footprints, Play, Square, Volume2, Flame, TrendingUp, Route, BookOpen, MessageCircleQuestion } from "lucide-vue-next";
+import { FileText, Sparkles, Target, ChevronRight, HeartHandshake, Footprints, Play, Square, Volume2, Flame, TrendingUp, Route, BookOpen, MessageCircleQuestion } from "lucide-vue-next";
 import { exerciseById } from "#shared/exercises";
 import { limbLine, limbsOf } from "#shared/limbs";
 import { ago, locale, profileText, stories, type TextKey } from "#shared/i18n";
@@ -227,6 +227,7 @@ async function askCheckup() {
         <nav v-if="inApp" class="tile wide more-list" :aria-label="T('journeyTitle')">
           <NuxtLink :to="`${base}/journey`" class="more-row"><Route class="ic" aria-hidden="true" /><b>{{ T("journeyRow", { n: journeyStep }) }}</b><ChevronRight class="ic chev" aria-hidden="true" /></NuxtLink>
           <NuxtLink :to="`${base}/questions`" class="more-row"><MessageCircleQuestion class="ic" aria-hidden="true" /><span class="more-text"><b>{{ T("questionsTitle") }}</b><span v-if="questionsWaiting" class="hint">{{ T("questionsWaitingN", { n: questionsWaiting }) }}</span></span><ChevronRight class="ic chev" aria-hidden="true" /></NuxtLink>
+          <NuxtLink v-if="p.letterExplanation" :to="`${base}/letter`" class="more-row"><FileText class="ic" aria-hidden="true" /><b>{{ T("letRow") }}</b><ChevronRight class="ic chev" aria-hidden="true" /></NuxtLink>
           <NuxtLink :to="`${base}/learn`" class="more-row"><BookOpen class="ic" aria-hidden="true" /><b>{{ T("learnTitle") }}</b><ChevronRight class="ic chev" aria-hidden="true" /></NuxtLink>
         </nav>
         <NuxtLink :to="`/patient/${p.id}/talk`" class="tile wide talk-tile">

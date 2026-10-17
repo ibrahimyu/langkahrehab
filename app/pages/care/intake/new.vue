@@ -34,12 +34,12 @@ async function read(body: Record<string, unknown>, image: string | null) {
 }
 
 async function onFile(e: Event) {
-  const file = (e.target as HTMLInputElement).files?.[0];
-  (e.target as HTMLInputElement).value = "";
-  if (!file) return;
+  const files = (e.target as HTMLInputElement).files;
+  if (!files?.length) return;
   try {
-    const image = await compressLetterPhoto(file);
-    await read({ image, lang: lang.value }, image);
+    const pages = await readLetterFiles(files);
+    (e.target as HTMLInputElement).value = "";
+    await read({ pages, lang: lang.value }, pages.find((x) => x.startsWith("data:image")) ?? null);
   } catch (err) {
     error.value = errorMessage(err);
   }
@@ -86,9 +86,9 @@ onMounted(() =>
         <button class="ik-drop" type="button" @click="fileInput?.click()">
           <Camera class="ic" aria-hidden="true" />
           <b>{{ T("ikTakePhoto") }}</b>
-          <span class="cr-meta">JPEG · PNG</span>
+          <span class="cr-meta">{{ T("ikFileTypes") }}</span>
         </button>
-        <input ref="fileInput" class="sr-only" type="file" accept="image/jpeg,image/png" capture="environment" @change="onFile" />
+        <input ref="fileInput" class="sr-only" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" multiple @change="onFile" />
         <p class="cr-meta">{{ T("ikPhotoPrivacy") }}</p>
       </section>
       <section class="ik-samples" :aria-label="T('ikUseSample')">

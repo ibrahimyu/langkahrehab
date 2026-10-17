@@ -72,13 +72,14 @@ async function shrink(file: File): Promise<string> {
   }
 }
 async function onLetter(e: Event) {
-  const file = (e.target as HTMLInputElement).files?.[0];
-  if (!file) return;
+  const files = (e.target as HTMLInputElement).files;
+  if (!files?.length) return;
   sendingLetter.value = true;
   try {
-    const image = await shrink(file);
+    const pages = await readLetterFiles(files);
+    const image = pages[0]!;
     const before = new Set(v.value.letters.map((l) => l.id));
-    if ((await send("/letters", "POST", { image, by: me.value?.id })) === true) {
+    if ((await send("/letters", "POST", { pages, by: me.value?.id })) === true) {
       const added = v.value.letters.find((l) => !before.has(l.id));
       if (added) images.set(added.id, image);
       toast.show(T("famLetterSent"), { tone: "good" });
@@ -139,7 +140,7 @@ const initial = (name: string) => name.replace(/^(Bu|Pak|Ibu|Bapak)\s+/, "")[0];
       </ul>
       <label class="ghost big-btn file-btn" :class="{ busy: sendingLetter }">
         <Camera class="ic" aria-hidden="true" /> {{ T("famLetterAdd") }}
-        <input ref="fileInput" type="file" accept="image/*" capture="environment" class="sr-file" :disabled="sendingLetter" @change="onLetter" />
+        <input ref="fileInput" type="file" accept="image/*,application/pdf" multiple class="sr-file" :disabled="sendingLetter" @change="onLetter" />
       </label>
     </section>
 

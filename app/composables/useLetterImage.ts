@@ -32,6 +32,30 @@ export async function compressLetterPhoto(file: File): Promise<string> {
   }
 }
 
+const MAX_PDF_CHARS = 12_000_000;
+const readAsDataUrl = (file: File) =>
+  new Promise<string>((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result));
+    r.onerror = () => reject(new Error("This file could not be read."));
+    r.readAsDataURL(file);
+  });
+
+/** Every page of a letter: photos shrunk to 1600 px, a PDF as it is. At most 6 pages. */
+export async function readLetterFiles(files: FileList | File[]): Promise<string[]> {
+  const list = Array.from(files).slice(0, 6);
+  const pages: string[] = [];
+  for (const f of list) {
+    if (f.type === "application/pdf") {
+      const data = await readAsDataUrl(f);
+      if (data.length > MAX_PDF_CHARS) throw new Error("The PDF is too large (about 9 MB at most).");
+      pages.push(data);
+    } else pages.push(await compressLetterPhoto(f));
+  }
+  if (!pages.length) throw new Error("Choose photos or a PDF of the letter.");
+  return pages;
+}
+
 /** Draws a synthetic sample letter as a paper photo (MED-04: labelled as a fictional patient). */
 export function drawSampleLetter(lines: string[]): string {
   const w = 1100;
