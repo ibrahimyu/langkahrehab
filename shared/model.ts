@@ -37,8 +37,8 @@ export type Difficulty = "easy" | "ok" | "hard";
 
 export type Workspace = {
   createdAt: string;
-  /** Days added by the demo "next day" button. All dates use `now(workspace)`. */
-  offsetDays: number;
+  /** Only in copies made by an older version that could move the clock forward; such a copy is made again. */
+  offsetDays?: number;
   /** SYS-03: date (YYYY-MM-DD) of the last daily cycle, so running it twice adds nothing. */
   lastDailyCycle?: string | null;
   /** AI-06: morning triage sentences, cached per role per date. */
@@ -428,8 +428,6 @@ export const DEFAULT_TZ = "Asia/Jakarta";
 export const isoDate = (d: Date, tz = DEFAULT_TZ) => new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
 export const DAY = 86_400_000;
 
-/** The clock for a workspace: real time plus any offset kept from older data. */
-export const nowFor = (w: Workspace | null) => Date.now() + (w?.offsetDays ?? 0) * DAY;
 
 export const limbOf = (p: Profile): PoseLimb => {
   const arm = limbsOf(p).find((l) => l.site === "upper");
