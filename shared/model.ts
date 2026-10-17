@@ -291,7 +291,8 @@ export const FAMILY_TASKS_MAX = 60;
 /** This week's news for the family (KEL-04): plain words, no diagnosis. */
 export type FamilyUpdate = { text: string; lang: Lang; generatedAt: string; by: "ai" | "template" | "care_team" };
 /** A hospital discharge letter photo sent by the family (KEL-07). Only the care team sees the image. */
-export type DischargeLetter = { id: string; at: string; by: string | null; image: string; status: "awaiting_doctor" | "reviewed" };
+/** `image` is the first page; `pages` holds every page (photos or a PDF) of a longer letter. */
+export type DischargeLetter = { id: string; at: string; by: string | null; image: string; pages?: string[]; status: "awaiting_doctor" | "reviewed" };
 
 export type Patient = {
   id: string;
@@ -318,6 +319,8 @@ export type Patient = {
   family: FamilyMember[];
   familyTasks: FamilyTask[];
   dismissedTasks?: DismissedTask[];
+  /** The discharge letter in everyday words, checked by the doctor (shown to the patient and family). */
+  letterExplanation?: { what: string; homeCare: string[]; warningSigns: string[]; visits: string[]; hospital: string | null; confirmedAt: string } | null;
   /** The physio and doctor (account ids) looking after this patient; null = any clinician. */
   careTeam?: { physioId: string | null; doctorId: string | null };
   familyUpdate: FamilyUpdate | null;

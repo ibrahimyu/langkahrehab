@@ -1,12 +1,10 @@
 import { newId, pickLang } from "#shared/model";
-import { emptyFields, sanitizeExtraction, type Intake } from "#shared/intake";
+import { emptyFields, LETTER_PAGE, sanitizeExtraction, sanitizePages, type Intake } from "#shared/intake";
 import { sampleFields, sampleLetter } from "#shared/sampleLetters";
 
-// AI-03 / DOK-01: reads one discharge letter photo into a draft intake for the doctor to review.
+// AI-03 / DOK-01: reads one discharge letter (photos of each page, or a PDF) into a draft intake for the doctor to review.
 // The photo comes from the doctor's browser, or from a letter the family sent (DOK-07). It is passed
 // to the model and dropped: only the extracted fields are stored, and it is never logged.
-const MAX_CHARS = 5_600_000; // about 4 MB of image
-const DATA_URL = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/;
 
 export default defineEventHandler(async (event) => {
   const { ws, now } = await context(event);
@@ -17,7 +15,7 @@ export default defineEventHandler(async (event) => {
   const sample = sampleLetter(b.sample);
 
   // A letter from the family: one draft per letter, so opening it twice does not read it twice.
-  let image = typeof b.image === "string" ? b.image : "";
+  let pages = sanitizePages(b.pages ?? b.image);
   let patientId: string | null = null;
   let letterId: string | null = null;
   let lang = pickLang(sample?.lang ?? b.lang);
@@ -28,23 +26,33 @@ export default defineEventHandler(async (event) => {
     if (letter.status !== "awaiting_doctor") throw bad("This letter has already been reviewed.");
     const open = (await listIntakes(ws)).find((x) => x.letterId === letter.id && x.status === "awaiting_doctor");
     if (open) return { intake: open, fallback: open.readBy !== "ai" };
-    image = letter.image;
+    pages = sanitizePages(letter.pages?.length ? letter.pages : letter.image);
     patientId = p.id;
     letterId = letter.id;
     lang = pickLang(b.lang ?? p.lang);
   }
-  const match = DATA_URL.exec(image);
-  if (!match || image.length > MAX_CHARS) throw bad("Choose a JPEG or PNG photo under 4 MB.");
+  if (!pages) throw bad("Choose photos (JPEG or PNG) or a PDF of the letter, up to 6 pages and about 9 MB.");
   rateLimit(event, ws, "intake", 10, 3_600_000);
 
-  let read: Pick<Intake, "fields" | "medicationsMentioned" | "suggestedTasks" | "readBy">;
+  let read: Pick<Intake, "fields" | "medicationsMentioned" | "suggestedTasks" | "explanation" | "readBy">;
   try {
     await aiBudget(event, "intake");
     const response = await gemini().models.generateContent({
       model: useRuntimeConfig().textModel,
-      contents: [{ role: "user", parts: [{ inlineData: { mimeType: match[1]!, data: match[2]! } }, { text: "Read this discharge letter." }] }],
+      contents: [
+        {
+          role: "user",
+          parts: [
+            ...pages.map((page) => {
+              const m = LETTER_PAGE.exec(page)!;
+              return { inlineData: { mimeType: m[1]!, data: m[2]! } };
+            }),
+            { text: pages.length > 1 ? `Read this discharge letter (${pages.length} pages, in order).` : "Read this discharge letter." },
+          ],
+        },
+      ],
       config: {
-        systemInstruction: intakeInstruction,
+        systemInstruction: intakeInstruction(lang),
         responseMimeType: "application/json",
         responseSchema: intakeSchema as never,
         temperature: 0,
@@ -56,8 +64,8 @@ export default defineEventHandler(async (event) => {
     // Never log the request: it carries the photo (AI-03 privacy).
     console.error("Intake read failed:", e?.statusCode ?? "", String(e?.statusMessage ?? e?.message ?? "").replace(/\s+/g, " ").slice(0, 120));
     read = sample
-      ? { fields: sampleFields(sample), medicationsMentioned: [...sample.medications], suggestedTasks: [], readBy: "sample" }
-      : { fields: emptyFields(), medicationsMentioned: [], suggestedTasks: [], readBy: "manual" };
+      ? { fields: sampleFields(sample), medicationsMentioned: [...sample.medications], suggestedTasks: [], explanation: null, readBy: "sample" }
+      : { fields: emptyFields(), medicationsMentioned: [], suggestedTasks: [], explanation: null, readBy: "manual" };
   }
 
   const intake: Intake = {

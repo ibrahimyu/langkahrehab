@@ -40,6 +40,26 @@ export const CONFIDENT = 0.7;
 
 export type FieldValue = { value: string | number | null; confidence: number; edited: boolean };
 export type IntakeFamily = Pick<FamilyMember, "name" | "relation" | "livesWithPatient">;
+/** One page of a letter: a photo (JPEG, PNG, WebP) or a PDF, as a data URL. */
+export const LETTER_PAGE = /^data:(image\/(?:jpeg|png|webp)|application\/pdf);base64,([A-Za-z0-9+/=]+)$/;
+export const LETTER_MAX_PAGES = 6;
+/** About 9 MB for all pages together. */
+export const LETTER_MAX_CHARS = 12_000_000;
+/** The pages that are valid, up to the limits; null when there are none or they are too large. */
+export function sanitizePages(raw: unknown): string[] | null {
+  const pages = (Array.isArray(raw) ? raw : [raw]).filter((x): x is string => typeof x === "string" && LETTER_PAGE.test(x)).slice(0, LETTER_MAX_PAGES);
+  if (!pages.length || pages.reduce((n, x) => n + x.length, 0) > LETTER_MAX_CHARS) return null;
+  return pages;
+}
+
+/** The letter in everyday words for the patient and family, checked by the doctor before they see it. */
+export type LetterExplanation = { what: string; homeCare: string[]; warningSigns: string[]; visits: string[] };
+const lines = (v: unknown, max: number) => (Array.isArray(v) ? v : []).map((x) => str(x, 240)).filter(Boolean).slice(0, max);
+export function sanitizeExplanation(raw: any): LetterExplanation | null {
+  const e = { what: str(raw?.what, 600), homeCare: lines(raw?.homeCare, 8), warningSigns: lines(raw?.warningSigns, 8), visits: lines(raw?.visits, 6) };
+  return e.what || e.homeCare.length || e.warningSigns.length || e.visits.length ? e : null;
+}
+
 /** A job for the family suggested from the letter's home advice; the doctor ticks the ones to send. */
 export type SuggestedTask = { title: string; detail: string; item: boolean; selected: boolean };
 
@@ -53,6 +73,8 @@ export type Intake = {
   medicationsMentioned: string[];
   /** From the letter's advice for home (wound care, papers, visits); never medicine, standing or walking. */
   suggestedTasks?: SuggestedTask[];
+  /** Plain words for the patient and family; the doctor can edit it before Confirm. */
+  explanation?: LetterExplanation | null;
   family: IntakeFamily[];
   lang: Lang;
   /** Set for a letter the family sent for an existing patient (DOK-07). */
@@ -97,7 +119,7 @@ export function sanitizeTasks(raw: unknown): SuggestedTask[] {
     .slice(0, 6);
 }
 
-export function sanitizeExtraction(raw: any): { fields: Record<IntakeField, FieldValue>; medicationsMentioned: string[]; suggestedTasks: SuggestedTask[] } {
+export function sanitizeExtraction(raw: any): { fields: Record<IntakeField, FieldValue>; medicationsMentioned: string[]; suggestedTasks: SuggestedTask[]; explanation: LetterExplanation | null } {
   const fields = {} as Record<IntakeField, FieldValue>;
   for (const f of INTAKE_FIELDS) {
     const value = cleanValue(f, raw?.[f]?.value);
@@ -105,7 +127,7 @@ export function sanitizeExtraction(raw: any): { fields: Record<IntakeField, Fiel
   }
   const meds = raw?.medicationsMentioned?.value ?? raw?.medicationsMentioned;
   const medicationsMentioned = (Array.isArray(meds) ? meds : []).map((m: unknown) => str(m, 120)).filter(Boolean).slice(0, 20);
-  return { fields, medicationsMentioned, suggestedTasks: sanitizeTasks(raw?.familyTasks) };
+  return { fields, medicationsMentioned, suggestedTasks: sanitizeTasks(raw?.familyTasks), explanation: sanitizeExplanation(raw?.explanation) };
 }
 
 export const emptyFields = (): Record<IntakeField, FieldValue> =>
@@ -221,6 +243,7 @@ export function patientFromIntake(intake: Intake, now: number): { patient: Patie
     createdAt: iso,
   };
   patient.familyTasks = [...generateFamilyTasks(patient, now), ...letterTasks(intake, iso)];
+  if (intake.explanation) patient.letterExplanation = { ...intake.explanation, hospital: v<string>(f, "hospital"), confirmedAt: iso };
   const result = { patientId: patient.id, planVersion: 1, tasks: patient.familyTasks.length, family: family.length, checkIn: patient.checkIns[0]?.scheduledFor ?? null, isNew: true };
   intakeEvent(patient, iso, result);
   return { patient, result };
@@ -246,6 +269,7 @@ export function applyIntake(p: Patient, intake: Intake, now: number): IntakeResu
   const added = intake.family.filter((m) => !known.has(m.name.toLowerCase())).map((m) => ({ id: newId(), ...m, lang: intake.lang, phone: null }));
   p.family = [...p.family, ...added].slice(0, 6);
   const tasks = [...generateFamilyTasks(p, now), ...letterTasks(intake, iso)];
+  if (intake.explanation) p.letterExplanation = { ...intake.explanation, hospital: v<string>(f, "hospital"), confirmedAt: iso };
   p.familyTasks = [...p.familyTasks, ...tasks];
   // The doctor has seen the letter: the photo is dropped, only the reviewed fields stay (DAT-10).
   p.letters = p.letters.map((l) => (l.id === intake.letterId ? { ...l, status: "reviewed" as const, image: "" } : l));
