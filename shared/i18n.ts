@@ -324,6 +324,10 @@ const text = {
   labPeak: { en: "Peak", id: "Puncak", zh: "峰值" },
   labTime: { en: "Time", id: "Waktu", zh: "用时" },
   // ---- Camera and form ----
+  camWatch_leg: { en: "Watching your {side} leg", id: "Memantau kaki {side} Anda", zh: "正在观察您的{side}腿" },
+  camWatch_arm: { en: "Watching your {side} arm", id: "Memantau lengan {side} Anda", zh: "正在观察您的{side}臂" },
+  sumNothing: { en: "No exercises were done this time", id: "Belum ada latihan yang dilakukan kali ini", zh: "这次还没有完成练习" },
+  sumNothingHint: { en: "That's OK. Try again when you're ready, even one set helps.", id: "Tidak apa-apa. Coba lagi kalau sudah siap, satu set pun membantu.", zh: "没关系。准备好再试，哪怕一组也有帮助。" },
   camLoading: { en: "Starting the camera…", id: "Menyalakan kamera…", zh: "正在打开摄像头…" },
   camNoPerson: { en: "Step into view so the camera can see you.", id: "Masuk ke dalam layar agar kamera bisa melihat Anda.", zh: "请进入画面，让摄像头看到您。" },
   camFraming: { en: "Move the phone back a little so your hips and knees are in view.", id: "Mundurkan HP sedikit agar pinggul dan lutut terlihat.", zh: "把手机往后挪一点，让髋部和膝盖进入画面。" },

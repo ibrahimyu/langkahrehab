@@ -32,6 +32,8 @@ const alerted = computed(() => (p.value?.alerts ?? []).some((a) => a.sessionId =
 const distress = computed(() => s.value?.concern?.kind === "distress");
 const danger = computed(() => !!s.value && (s.value.nextAction.kind === "stop_contact" || s.value.nextAction.kind === "rest_contact"));
 const form = computed(() => (s.value ? sessionForm(s.value.exercises) : null));
+/** No rep was done: say so plainly, no celebration. */
+const nothingDone = computed(() => !!s.value && s.value.exercises.every((e) => e.logged.every((n) => !n)));
 const setsDone = computed(() => {
   const ex = s.value?.exercises ?? [];
   return `${ex.reduce((n, e) => n + e.logged.filter((v) => v !== null).length, 0)}/${ex.reduce((n, e) => n + e.sets, 0)}`;
@@ -43,8 +45,9 @@ const setsDone = computed(() => {
   <div v-if="p && s" class="patient-view">
     <div class="celebrate">
       <p class="eyebrow">{{ T("summary") }}</p>
-      <h1>{{ distress ? T("crisisTitle") : s.concern ? T("stopped") : s.nextAction.kind === "rest_contact" ? T("sessionDone") : T("greatWork") }}</h1>
-      <div v-if="!s.concern && s.nextAction.kind !== 'rest_contact'" class="burst" aria-hidden="true"><i /><i /><i /><i /><i /><i /></div>
+      <h1>{{ distress ? T("crisisTitle") : s.concern ? T("stopped") : nothingDone ? T("sumNothing") : s.nextAction.kind === "rest_contact" ? T("sessionDone") : T("greatWork") }}</h1>
+      <p v-if="nothingDone && !s.concern" class="hint">{{ T("sumNothingHint") }}</p>
+      <div v-if="!s.concern && !nothingDone && s.nextAction.kind !== 'rest_contact'" class="burst" aria-hidden="true"><i /><i /><i /><i /><i /><i /></div>
     </div>
 
     <!-- SYS-01: distress gets support and a way to reach a person, never a cold "stopped". Fixed text, not AI. -->

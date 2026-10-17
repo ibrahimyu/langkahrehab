@@ -74,6 +74,11 @@ const coach = useLiveCoach({
       api(`/api/patients/${props.patientId}/${path}`, { method: "POST", body }).catch(() => pending.queueExtra(path, body));
       return { ok: true };
     }
+    // A set starts only once the camera can see the limb it measures; the coach is told how to help.
+    if (name === "start_set" && cameraBlind()) {
+      startRefused = true;
+      return { ok: false, error: `The camera cannot see the patient yet. Ask them, in a few words, to place the phone so their whole body is in view (${shownExercise.value?.id ? T(`camPlace_${shownExercise.value.id}` as TextKey) : ""}). Do not start the set and do not say the position is right. An [APP] message will say when the camera can see them.` };
+    }
     // In camera mode the camera's count is the source of truth, whatever number the coach says.
     if (name === "log_set" && s.mode === "camera" && s.phase === "set") {
       const reps = currentLog(s).camera ?? 0;
@@ -170,17 +175,27 @@ function onTop() {
 }
 onBeforeUnmount(clearHold);
 
-// ---- Say it when the camera loses the patient (they may be too far to read the screen) ----
+// ---- Camera position: nothing starts until the camera can see the limb it measures ----
+let startRefused = false;
+const cameraBlind = () => useCamera.value && trackable.value && !tracker.value?.ready;
 let lastFramingSaid = 0;
 watch(
-  () => tracker.value?.framing,
+  () => tracker.value?.framing ?? null,
   (f) => {
     const s = session.value;
-    if (!f || !s || paused.value || (s.phase !== "set" && s.phase !== "ready")) return;
+    if (!s || paused.value || (s.phase !== "set" && s.phase !== "ready")) return;
+    if (!f) {
+      // In view again: the coach may start the set it was asked to hold.
+      if (startRefused && live.value && s.phase === "ready") coach.say("[APP] The camera can now see the patient. Tell them in a few words, then call start_set when they are ready.");
+      startRefused = false;
+      return;
+    }
     if (Date.now() - lastFramingSaid < 12_000) return;
     lastFramingSaid = Date.now();
     if (engine.value === "guide") voice.speak(T("cueCantSee"));
-    else if (live.value) coach.say("[APP] The camera cannot see the patient well. Ask them, in a few words, to move the phone back a little.");
+    // Mid-set the coach says it at once; before a set it only needs to know (no extra turn).
+    else if (live.value && s.phase === "set") coach.say("[APP] The camera cannot see the patient well. Ask them, in a few words, to move the phone back a little.");
+    else if (live.value) coach.addContext("[APP] Camera: the patient is not fully in view yet.");
   },
 );
 
@@ -553,7 +568,8 @@ const DIFFS: Difficulty[] = ["easy", "ok", "hard"];
           <p class="on-night-2">{{ T("setsReps", { sets: 1, reps: item.reps }) }} · {{ item.exercise.tempo[lang] }}</p>
           <ExerciseVideoButton :exercise-id="item.exercise.id" :level="patient.profile.level" />
           <p v-if="settings.support === 'helper'" class="helper-tip">{{ T("helperTip") }}</p>
-          <button class="primary big-btn pill-btn" @click="startSet">{{ T("sesStartSet", { n: session.current }) }}</button>
+          <p v-if="cameraBlind()" class="helper-tip">{{ T("cueCantSee") }}</p>
+          <button class="primary big-btn pill-btn" :disabled="cameraBlind()" @click="startSet">{{ T("sesStartSet", { n: session.current }) }}</button>
         </div>
         <!-- Coach engine: waiting for the coach -->
         <div v-else-if="engine === 'coach' && (session.phase === 'intro' || session.phase === 'ready')" class="imm-center">
