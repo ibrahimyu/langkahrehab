@@ -284,20 +284,15 @@ function onRep(e: RepEvent) {
 .stepper button .ic { width: 18px; height: 18px; }
 .stepper li.done button { background: var(--pine-soft); border-color: var(--pine); color: var(--pine); }
 .stepper li.on button { width: 48px; height: 48px; background: var(--pine); border-color: var(--pine); color: var(--surface); box-shadow: 0 0 0 5px var(--pine-soft); }
-.stepper li.stop.on button { background: var(--danger-ink); border-color: var(--danger-ink); box-shadow: 0 0 0 5px var(--danger-soft); }
 /* The chapter card: a coloured band with a big icon and title, then the content. */
 .tut-card { border-radius: var(--r-sheet); overflow: hidden; background: var(--surface); box-shadow: var(--shadow-float); animation: tut-in var(--dur) var(--ease-out); touch-action: pan-y; }
-.tut-band { display: grid; grid-template-columns: auto 1fr auto; grid-template-areas: "badge kicker read" "badge title read"; column-gap: 12px; align-items: center; padding: 16px 16px 14px; background: var(--pine); color: var(--surface); }
-.tut-band h2 { grid-area: title; color: var(--surface); font-size: 1.5rem; line-height: 1.15; }
-.tut-kicker { grid-area: kicker; font-size: 0.8125rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.85; }
-.tut-badge { grid-area: badge; display: grid; place-items: center; width: 52px; height: 52px; border-radius: 16px; background: color-mix(in srgb, var(--surface) 18%, transparent); }
-.tut-badge .ic { width: 28px; height: 28px; }
-.tut-read { grid-area: read; background: var(--surface); }
-.ch-mistakes .tut-band { background: var(--dawn); color: var(--ink); }
-.ch-mistakes .tut-band h2 { color: var(--ink); }
-.ch-stop .tut-band { background: var(--danger-ink); }
-.tut-body { display: grid; gap: 14px; padding: 18px 16px 20px; font-size: 1.125rem; line-height: 1.5; }
-.tut-lead { margin: 0; font-size: 1.25rem; font-weight: 600; }
+.tut-band { display: grid; grid-template-columns: auto 1fr auto; grid-template-areas: "badge kicker read" "badge title read"; column-gap: 12px; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+.tut-band h2 { grid-area: title; font-size: 1.25rem; line-height: 1.2; }
+.tut-kicker { grid-area: kicker; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); }
+.tut-badge { grid-area: badge; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 14px; background: var(--pine-soft); color: var(--pine); }
+.tut-badge .ic { width: 22px; height: 22px; }
+.tut-body { display: grid; gap: 12px; padding: 16px; font-size: 1rem; line-height: 1.5; }
+.tut-lead { margin: 0; font-size: 1.0625rem; font-weight: 600; }
 .checklist, .pairs, .stops { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
 .checklist label { display: flex; gap: 12px; align-items: flex-start; padding: 12px; border-radius: 14px; background: var(--sunken); cursor: pointer; transition: background-color var(--dur-fast) var(--ease-out); }
 .checklist input { position: absolute; opacity: 0; pointer-events: none; }
@@ -307,23 +302,23 @@ function onRep(e: RepEvent) {
 .checklist input:focus-visible + .box { outline: 3px solid var(--focus, var(--pine)); outline-offset: 2px; }
 .timeline { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
 .timeline li { display: flex; gap: 14px; align-items: flex-start; position: relative; padding-bottom: 16px; }
-.timeline li:not(:last-child)::before { content: ""; position: absolute; left: 15px; top: 34px; bottom: 2px; width: 2px; background: var(--pine-soft); }
-.timeline .dot { display: grid; place-items: center; width: 32px; height: 32px; flex: none; border-radius: 50%; background: var(--pine); color: var(--surface); font-weight: 700; font-size: 1rem; }
+.timeline li:not(:last-child)::before { content: ""; position: absolute; left: 13px; top: 30px; bottom: 2px; width: 2px; background: var(--pine-soft); }
+.timeline .dot { display: grid; place-items: center; width: 28px; height: 28px; flex: none; border-radius: 50%; background: var(--pine); color: var(--surface); font-weight: 700; font-size: 0.875rem; }
 .rhythm { display: grid; gap: 8px; padding: 14px; border-radius: 14px; background: var(--sunken); }
 .rhythm-label { font-size: 0.8125rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2); }
 .rhythm-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .beat { padding: 8px 14px; border-radius: var(--r-pill); background: var(--surface); font-weight: 700; text-transform: capitalize; }
-.beat.hold { background: var(--dawn); }
+.beat.hold { background: var(--pine-soft); color: var(--pine); }
 .beat small { font-weight: 600; text-transform: none; }
 .beat-arrow { width: 18px; height: 18px; color: var(--ink-3); }
 .pairs li { display: grid; border-radius: 14px; overflow: hidden; border: 1px solid var(--line); }
 .pairs p { margin: 0; display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; }
 .pairs .ic { flex: none; margin-top: 4px; width: 20px; height: 20px; }
-.avoid { background: var(--danger-soft); color: var(--danger-ink); text-decoration: line-through; text-decoration-thickness: 1px; }
+.avoid { background: var(--sunken); color: var(--ink-2); text-decoration: line-through; text-decoration-thickness: 1px; }
 .avoid .ic { color: var(--danger-ink); }
 .instead { background: var(--surface); font-weight: 600; }
 .instead .ic { color: var(--pine); }
-.stops li { display: flex; gap: 12px; align-items: flex-start; padding: 12px; border-radius: 14px; background: var(--danger-soft); color: var(--ink); font-weight: 600; }
+.stops li { display: flex; gap: 12px; align-items: flex-start; padding: 12px; border-radius: 14px; background: var(--sunken); color: var(--ink); font-weight: 600; }
 .stops .ic { flex: none; margin-top: 3px; color: var(--danger-ink); }
 .stop-call { display: flex; gap: 8px; justify-content: center; align-items: center; text-decoration: none; }
 .tut-nav { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 8px; }
