@@ -74,6 +74,6 @@ test("adherence and coach instructions", () => {
   assert.match(text, /Below-knee amputation, left leg/);
   assert.match(text, /1\. Angkat pinggul/);
   assert.match(text, /2\. Angkat kaki ke samping/);
-  assert.match(text, /walk to the mosque/);
+  assert.match(text, /jalan sendiri lagi/);
   assert.match(text, /The camera counts and checks every rep/);
 });

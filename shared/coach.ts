@@ -13,7 +13,7 @@ export type CoachOptions = {
 };
 
 const language: Record<Lang, string> = {
-  id: 'Speak only Indonesian (Bahasa Indonesia). Address the patient as "Bapak" or "Ibu" with their name.',
+  id: 'Speak only Indonesian (Bahasa Indonesia). Address the patient by their name as written (for example "Pak Budi"); if the name has no title, say "Anda". Never guess "Bapak" or "Ibu".',
   en: "Speak only English. Address the patient by name.",
   zh: "Speak only Mandarin Chinese (Simplified Chinese when written). Address the patient politely with 您.",
 };

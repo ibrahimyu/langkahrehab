@@ -60,7 +60,7 @@ export function seedCases(now: number): Patient[] {
   const budiPlan = plan(2, [
     { exerciseId: "bridging", sets: 2, reps: 10 },
     { exerciseId: "side-lying-abduction", sets: 2, reps: 10 },
-  ], "Go slowly. Doing the movement well matters more than speed.", 3, 9);
+  ], "Pelan-pelan saja. Gerakan yang benar lebih penting daripada cepat.", 3, 9);
   const budi: Patient = {
     ...base,
     id: "budi",
@@ -68,7 +68,7 @@ export function seedCases(now: number): Patient[] {
     age: 58,
     story: "Below-knee amputation after a diabetic foot wound. Pain has been creeping up this week.",
     lang: "id",
-    profile: { level: "below_knee", side: "left", stage: "pre_prosthetic", cause: "diabetes", restrictions: "Check the right foot every day." },
+    profile: { level: "below_knee", side: "left", stage: "pre_prosthetic", cause: "diabetes", restrictions: "Periksa kaki kanan setiap hari." },
     plan: budiPlan,
     planHistory: [budiV1],
     sessions: [
@@ -81,17 +81,17 @@ export function seedCases(now: number): Patient[] {
       ]),
     ],
     memories: [
-      memory("goal", "Wants to walk to the mosque on his own again.", 13),
-      memory("difficulty", "The side leg lift feels hard in the second set.", 5),
-      memory("preference", "Likes the coach to count slowly.", 8),
-      memory("life", "His daughter helps him set up the mat in the morning.", 10),
+      memory("goal", "Ingin bisa jalan sendiri lagi ke tempat yang ia suka.", 13),
+      memory("difficulty", "Angkat kaki ke samping terasa berat di set kedua.", 5),
+      memory("preference", "Suka kalau pelatih menghitung pelan-pelan.", 8),
+      memory("life", "Anak perempuannya membantu menggelar matras setiap pagi.", 10),
     ],
     diary: [
-      diary("phantom_pain", 4, "at night", 12),
+      diary("phantom_pain", 4, "malam hari", 12),
       diary("phantom_pain", 5, "", 8),
       diary("mood", 6, "", 8),
-      diary("phantom_pain", 6, "burning feeling in the missing foot", 3),
-      diary("mood", 4, "frustrated, slow progress", 1),
+      diary("phantom_pain", 6, "rasa terbakar di kaki yang sudah tidak ada", 3),
+      diary("mood", 4, "kesal, kemajuannya lambat", 1),
     ],
     skinChecks: [{
       id: newId(), at: at(4, 19), lang: "id", area: "residual_limb",
@@ -113,7 +113,7 @@ export function seedCases(now: number): Patient[] {
   const sariPlan = plan(3, [
     { exerciseId: "bridging", sets: 2, reps: 12 },
     { exerciseId: "sit-to-stand", sets: 2, reps: 8 },
-  ], "Great progress! More bridging reps this week.", 10, 6);
+  ], "Kemajuannya bagus! Repetisi angkat pinggul ditambah minggu ini.", 10, 6);
   const sari: Patient = {
     ...base,
     id: "sari",
@@ -128,8 +128,8 @@ export function seedCases(now: number): Patient[] {
       [3, [[12, 12], [8, 8]], 1, 2, "ok"], [2, [[12, 12], [8, 7]], 2, 2, "ok"], [1, [[12, 12], [8, 8]], 1, 1, "easy"],
     ]),
     memories: [
-      memory("goal", "Wants to go back to work at her tailoring shop.", 12),
-      memory("motivation", "Does it for her son, who is 7.", 9),
+      memory("goal", "Ingin kembali bekerja di usaha jahitnya.", 12),
+      memory("motivation", "Semangat demi anaknya yang berumur 7 tahun.", 9),
     ],
     diary: [diary("phantom_sensation", 3, "tingling in the missing foot", 6), diary("mood", 8, "", 2)],
     brief: brief("id"),
@@ -147,10 +147,10 @@ export function seedCases(now: number): Patient[] {
     age: 67,
     story: "Below-knee amputation from poor circulation. Prefers Mandarin. No exercise for 4 days.",
     lang: "zh",
-    profile: { level: "below_knee", side: "right", stage: "pre_prosthetic", cause: "vascular", restrictions: "Stand only with the walker." },
+    profile: { level: "below_knee", side: "right", stage: "pre_prosthetic", cause: "vascular", restrictions: "只能扶着助行器站立。" },
     plan: liemPlan,
     sessions: sessions(liemPlan, "zh", [[11, [[8, 8], [6, 6]], 3, 3, "ok"], [8, [[8, 7], [6, 5]], 3, 4, "hard"], [4, [[6, null], [4, null]], 4, 4, "hard"]]),
-    memories: [memory("life", "His granddaughter visits on Sundays.", 8), memory("motivation", "Likes old Mandarin songs.", 11)],
+    memories: [memory("life", "孙女每个星期天来看他。", 8), memory("motivation", "喜欢听老的华语歌。", 11)],
     diary: [diary("phantom_pain", 5, "", 8), diary("mood", 3, "lonely", 4)],
     alerts: [alert("missed_sessions", "low", "No exercise session for 4 days.", ["physio"], 0)],
     brief: brief("zh"),
@@ -182,7 +182,7 @@ export function seedCases(now: number): Patient[] {
     { exerciseId: "arm-raise-forward", sets: 2, reps: 10 },
     { exerciseId: "elbow-bend", sets: 2, reps: 12 },
     { exerciseId: "one-hand-practice", sets: 1, reps: 5 },
-  ], "Try buttoning your shirt with your left hand this week.", 12, 4);
+  ], "Minggu ini coba kancingkan baju dengan tangan kiri.", 12, 4);
   const rafi: Patient = {
     ...base,
     id: "rafi",
@@ -197,21 +197,21 @@ export function seedCases(now: number): Patient[] {
       [3, [[10, 10], [10, 9], [12, 12], [4]], 2, 3, "ok"],
       [1, [[10, 10], [10, 10], [12, 12], [5]], 1, 2, "easy"],
     ]),
-    memories: [memory("goal", "Wants to go back to work at the motorbike workshop.", 10), memory("motivation", "Saving up to get married next year.", 7)],
-    diary: [diary("phantom_sensation", 4, "feels like the right hand is still clenched", 3), diary("mood", 6, "", 1)],
+    memories: [memory("goal", "Ingin kembali kerja di bengkel motor.", 10), memory("motivation", "Sedang menabung untuk menikah tahun depan.", 7)],
+    diary: [diary("phantom_sensation", 4, "rasanya tangan kanan masih mengepal", 3), diary("mood", 6, "", 1)],
     brief: brief("id"),
   };
 
   // Goals in the patient's own words, broken into steps; body-loading steps wait for the physio's OK.
   budi.goals = [
-    goal("Walk to the mosque on my own again", "faith", true, [
-      target("Sit on the edge of the bed for 5 minutes without help", { doneAt: at(10) }),
-      target("Stand for 1 minute with the walker", { needsPhysioOk: true, physioOkAt: at(6), doneAt: at(4) }),
-      target("Walk 10 metres with the walker", { needsPhysioOk: true, source: "physio" }),
-      target("Walk to the front gate with the walker", { needsPhysioOk: true }),
-      target("Walk to the mosque with my prosthesis", { needsPhysioOk: true, targetMonth: date(75).slice(0, 7) }),
+    goal("Bisa jalan sendiri lagi ke tempat yang saya suka", "mobility", true, [
+      target("Duduk di tepi tempat tidur 5 menit tanpa dibantu", { doneAt: at(10) }),
+      target("Berdiri 1 menit dengan walker", { needsPhysioOk: true, physioOkAt: at(6), doneAt: at(4) }),
+      target("Jalan 10 meter dengan walker", { needsPhysioOk: true, source: "physio" }),
+      target("Jalan sampai pagar depan dengan walker", { needsPhysioOk: true }),
+      target("Jalan ke ujung jalan dengan kaki palsu", { needsPhysioOk: true, targetMonth: date(75).slice(0, 7) }),
     ], 13),
-    goal("Play with my grandchildren on the floor", "family", false, [target("Get down to the floor and up again with help", { needsPhysioOk: true })], 8),
+    goal("Bermain dengan cucu di lantai", "family", false, [target("Turun ke lantai dan bangun lagi dengan bantuan", { needsPhysioOk: true })], 8),
   ];
   budi.notes = [
     note("complaint", "Kaki yang sudah tidak ada itu rasanya seperti terbakar kalau malam, saya jadi susah tidur.", "Phantom pain, burning, worse at night; affects sleep.", 3, { urgency: "watch", discussAtVisit: true }),
@@ -220,16 +220,16 @@ export function seedCases(now: number): Patient[] {
   ];
   budi.preferences = { ...defaultPreferences(), exerciseTime: "07:00", phone: "+62 812 0000 1234" };
   sari.goals = [
-    goal("Go back to work at my tailoring shop", "work", true, [
-      target("Stand at the cutting table for 10 minutes", { needsPhysioOk: true, physioOkAt: at(9), doneAt: at(5) }),
-      target("Stand for 30 minutes with short breaks", { needsPhysioOk: true, physioOkAt: at(3) }),
-      target("Take the angkot to the shop with my sister", { needsPhysioOk: true }),
-      target("Work a half day at the shop", { needsPhysioOk: true, targetMonth: date(45).slice(0, 7) }),
+    goal("Kembali bekerja di usaha jahit saya", "work", true, [
+      target("Berdiri di meja potong 10 menit", { needsPhysioOk: true, physioOkAt: at(9), doneAt: at(5) }),
+      target("Berdiri 30 menit dengan istirahat sebentar", { needsPhysioOk: true, physioOkAt: at(3) }),
+      target("Naik angkot ke toko bersama adik", { needsPhysioOk: true }),
+      target("Bekerja setengah hari di toko", { needsPhysioOk: true, targetMonth: date(45).slice(0, 7) }),
     ], 12),
   ];
-  sari.notes = [note("request", "Can the exercises be in the evening? I help at the shop in the morning.", "Asks to move sessions to the evening (works mornings).", 2, { source: "typed", via: "text" })];
+  sari.notes = [note("request", "Bisa latihannya sore saja? Pagi saya bantu di toko.", "Asks to move sessions to the evening (works mornings).", 2, { source: "typed", via: "text" })];
   sari.preferences = { ...defaultPreferences(), exerciseTime: "19:00" };
-  liem.goals = [goal("Walk in the park with my wife", "mobility", true, [target("Stand up from a chair with the walker", { needsPhysioOk: true })], 9)];
+  liem.goals = [goal("和太太一起在公园散步", "mobility", true, [target("扶着助行器从椅子上站起来", { needsPhysioOk: true })], 9)];
   liem.notes = [note("worry", "我一个人在家的时候，怕摔倒。", "Afraid of falling when home alone.", 4, { urgency: "watch" })];
 
   // Family (DAT-02, DAT-03): who helps at home, and the jobs shared out from the approved templates.
@@ -243,10 +243,10 @@ export function seedCases(now: number): Patient[] {
   budi.notes.push(note("question", "Apakah Bapak sudah boleh dibonceng naik motor?", "Family question: may he ride pillion on a motorbike?", 2, { source: "family", via: "text", familyMemberId: "dimas" }));
 
   rafi.goals = [
-    goal("Go back to work at the workshop", "work", true, [
-      target("Button my shirt with my left hand", { doneAt: at(2) }),
-      target("Eat a whole meal with my left hand", {}),
-      target("Try a prosthesis fitting at the clinic", { needsPhysioOk: true, targetMonth: date(60).slice(0, 7) }),
+    goal("Kembali kerja di bengkel", "work", true, [
+      target("Mengancingkan baju dengan tangan kiri", { doneAt: at(2) }),
+      target("Makan sampai habis dengan tangan kiri", {}),
+      target("Mencoba pemasangan tangan palsu di klinik", { needsPhysioOk: true, targetMonth: date(60).slice(0, 7) }),
     ], 9),
   ];
   rafi.preferences = { ...defaultPreferences(), exerciseTime: "20:00" };
