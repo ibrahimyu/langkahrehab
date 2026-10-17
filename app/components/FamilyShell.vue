@@ -20,7 +20,6 @@ const tabs: { key: TextKey; icon: Component; to: string }[] = [
   { key: "famTabTasks", icon: ListChecks, to: "/tasks" },
   { key: "famTabQuestions", icon: MessageCircleQuestion, to: "/questions" },
   { key: "famTabTalk", icon: HeartHandshake, to: "/talk" },
-  { key: "famTabFamily", icon: Users, to: "/members" },
 ];
 const base = computed(() => `/family/${props.patientId}`);
 const isOn = (to: string) => (to ? route.path.startsWith(base.value + to) : route.path === base.value || route.path === `${base.value}/`);
@@ -40,6 +39,7 @@ const pick = (id: string) => {
         {{ T("famIAm", { name: me.name }) }}
         <ChevronDown class="ic" aria-hidden="true" />
       </button>
+      <NuxtLink :to="`${base}/members`" class="fam-people" :class="{ on: isOn('/members') }" :aria-label="T('famTabFamily')"><Users class="ic" aria-hidden="true" /></NuxtLink>
     </header>
 
     <div v-if="loadError" class="card stack fam-state" role="alert">
@@ -71,6 +71,8 @@ const pick = (id: string) => {
 </template>
 
 <style scoped>
+.fam-people { display: grid; place-items: center; width: 44px; height: 44px; flex: none; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+.fam-people.on { background: var(--ink); color: var(--surface); }
 .family-app { padding-bottom: calc(92px + env(safe-area-inset-bottom)); }
 .fam-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
 .fam-patient { font-size: 0.8125rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--role-family); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

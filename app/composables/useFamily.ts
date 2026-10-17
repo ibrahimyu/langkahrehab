@@ -25,7 +25,7 @@ export function useFamily(patientId: string) {
 
   const me = computed(() => {
     const fam = view.value?.family ?? [];
-    return fam.find((m) => m.id === memberId.value) ?? fam.find((m) => m.id === account.value?.id) ?? fam[0] ?? null;
+    return fam.find((m) => m.id === account.value?.id) ?? fam.find((m) => m.id === memberId.value) ?? fam[0] ?? null;
   });
   function setMe(id: string) {
     memberId.value = id;

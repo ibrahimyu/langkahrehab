@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Phone } from "lucide-vue-next";
-import { LANGS, LANG_NAMES, type Lang } from "#shared/exercises";
+import type { Lang } from "#shared/exercises";
 import type { TextKey } from "#shared/i18n";
 import { FAMILY_RELATIONS, type FamilyRelation } from "#shared/model";
 
@@ -17,11 +17,6 @@ const T = useT();
     </div>
   </div>
   <label class="field"><span class="with-ic"><Phone class="ic" aria-hidden="true" /> {{ T("phoneLabel") }}</span><input v-model="model.phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="30" /></label>
-  <div class="field"><span>{{ T("languageLabel") }}</span>
-    <div class="seg seg-full" role="group" :aria-label="T('languageLabel')">
-      <button v-for="l in LANGS" :key="l" type="button" :class="{ on: model.lang === l }" @click="model.lang = l">{{ LANG_NAMES[l] }}</button>
-    </div>
-  </div>
   <button type="button" class="toggle" role="switch" :aria-checked="model.livesWithPatient" @click="model.livesWithPatient = !model.livesWithPatient">
     <span class="switch" :class="{ on: model.livesWithPatient }" aria-hidden="true" /> {{ T("famLivesWith") }}
   </button>
