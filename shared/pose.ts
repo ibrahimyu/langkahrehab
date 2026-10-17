@@ -37,7 +37,6 @@ export const MIN_VISIBILITY = 0.5;
 
 const other = (s: Side): Side => (s === "left" ? "right" : "left");
 const pt = (lm: Landmark[], side: Side, j: Joint) => lm[IDX[side][j]]!;
-const mid = (a: Landmark, b: Landmark): Landmark => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
 
 /** Angle ABC in degrees (0–180), in the image plane. */
 export function angle(a: Landmark, b: Landmark, c: Landmark) {
@@ -59,29 +58,33 @@ export function tracking(exerciseId: string, limb: Limb): Tracking | null {
   const amp = limb.side;
   const good = other(amp);
   switch (exerciseId) {
-    case "bridging":
-      // Hips rise: the shoulder–hip–knee angle of the intact leg opens towards straight.
+    case "bridging": {
+      // Hips rise: the shoulder–hip–knee angle opens towards straight. Watched on the amputated leg
+      // (it rests on the towel and moves with the hips); above the knee there is no knee point there,
+      // so the intact leg is watched instead.
+      const leg = limb.level === "above_knee" ? good : amp;
       return {
-        label: "Hip angle (shoulder–hip–knee, intact side)",
+        label: "Hip angle (shoulder–hip–knee)",
         up: 160,
         down: 145,
         range: [100, 185],
         camera: "Side view at floor level, about 2 m away, whole body in frame.",
-        uses: [[good, "shoulder"], [good, "hip"], [good, "knee"]],
-        compute: (lm) => angle(pt(lm, good, "shoulder"), pt(lm, good, "hip"), pt(lm, good, "knee")),
+        uses: [[leg, "shoulder"], [leg, "hip"], [leg, "knee"]],
+        compute: (lm) => angle(pt(lm, leg, "shoulder"), pt(lm, leg, "hip"), pt(lm, leg, "knee")),
       };
+    }
     case "side-lying-abduction":
-      // Top leg lifts: the angle between the two thighs at the middle of the hips grows.
+      // The top (amputated) leg lifts away from the line of the body: 180° minus the
+      // shoulder–hip–knee angle on that side. The other leg moving does not count.
       return {
-        label: "Angle between the thighs",
-        up: 25,
-        down: 12,
+        label: "Leg lift (degrees from the line of the body)",
+        up: 18,
+        down: 8,
         range: [0, 60],
         camera: "From the feet or the front, about 2 m away, both hips and knees in frame.",
         unsupported: limb.level === "above_knee" ? NO_KNEE : undefined,
-        uses: [[good, "hip"], [amp, "hip"], [good, "knee"], [amp, "knee"]],
-        compute: (lm) =>
-          angle(pt(lm, good, "knee"), mid(pt(lm, good, "hip"), pt(lm, amp, "hip")), pt(lm, amp, "knee")),
+        uses: [[amp, "shoulder"], [amp, "hip"], [amp, "knee"]],
+        compute: (lm) => 180 - angle(pt(lm, amp, "shoulder"), pt(lm, amp, "hip"), pt(lm, amp, "knee")),
       };
     case "prone-hip-extension":
       // Lying on the stomach: the thigh of the exercising leg tilts upwards from the hip.
@@ -136,6 +139,12 @@ export function tracking(exerciseId: string, limb: Limb): Tracking | null {
     }
   }
   return null;
+}
+
+/** The limb the camera watches for this exercise, for the label on screen ("your left leg"). */
+export function watched(t: Tracking): { side: Side; part: "leg" | "arm" } {
+  const [side, joint] = t.uses[t.uses.length - 1]!;
+  return { side, part: joint === "elbow" || joint === "wrist" ? "arm" : "leg" };
 }
 
 /** Landmarks the tracking needs that the camera cannot see well enough. */

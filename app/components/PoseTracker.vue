@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { tracking, type Limb, type RepEvent } from "#shared/pose";
+import { tracking, watched, type Limb, type RepEvent } from "#shared/pose";
 import type { PoseModel } from "../composables/usePoseTracker";
 
 // Camera with the pose skeleton drawn on top. Counts and scores reps while `counting` is on.
@@ -36,6 +36,12 @@ const framing = computed(() => {
   if (tracker.missing.value.length) return T("camFraming");
   return null;
 });
+/** Which limb is measured, in words, so the patient knows which one to move. */
+const watching = computed(() => {
+  if (!t.value || t.value.unsupported) return null;
+  const w = watched(t.value);
+  return T(`camWatch_${w.part}`, { side: T(w.side) });
+});
 const ready = computed(() => tracker.state.value === "running" && !!t.value && !framing.value);
 
 defineExpose({ framing, reset: tracker.reset, start: () => tracker.start(props.model), stop: tracker.stop, lastMove: tracker.lastMove, ready, trackable: computed(() => !!t.value && !t.value.unsupported) });
@@ -47,6 +53,7 @@ defineExpose({ framing, reset: tracker.reset, start: () => tracker.start(props.m
       <video ref="video" playsinline muted />
       <canvas ref="overlay" />
       <p v-if="framing" class="camera-hint" role="status">{{ framing }}</p>
+      <p v-else-if="watching && tracker.state.value === 'running'" class="camera-watch">{{ watching }}</p>
     </div>
     <div v-if="analysis && t" class="analysis">
       <p class="analysis-now"><b>{{ tracker.value.value ?? "–" }}°</b> <span class="hint">{{ t.label }}</span></p>
@@ -57,6 +64,7 @@ defineExpose({ framing, reset: tracker.reset, start: () => tracker.start(props.m
 </template>
 
 <style scoped>
+.camera-watch { position: absolute; left: 50%; top: 12px; transform: translateX(-50%); margin: 0; padding: 6px 12px; border-radius: var(--r-pill); font-size: 0.875rem; font-weight: 700; white-space: nowrap; background: color-mix(in srgb, var(--dawn) 92%, transparent); color: var(--ink); }
 .analysis { display: grid; gap: 6px; margin-top: 8px; }
 .analysis-now { margin: 0; display: flex; gap: 8px; align-items: baseline; }
 .analysis-now b { font: 700 1.5rem/1 var(--display); }
