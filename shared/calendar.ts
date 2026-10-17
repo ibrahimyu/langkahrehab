@@ -130,7 +130,14 @@ export const currentTarget = (p: Patient) => nextTarget(p.goals)?.target ?? null
 // ---- .ics (RFC 5545) for the phone's own calendar ----
 const icsText = (s: string) => s.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
 const compact = (date: string) => date.replace(/-/g, "");
-export function buildIcs(e: Pick<CalEvent, "date" | "time">, title: string, description: string, uid: string, stamp: number): string {
+export function buildIcs(
+  e: Pick<CalEvent, "date" | "time">,
+  title: string,
+  description: string,
+  uid: string,
+  stamp: number,
+  opts: { rrule?: string; alarm?: string } = {},
+): string {
   const d = new Date(stamp);
   const dtstamp = `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}Z`;
   const when = e.time
@@ -138,8 +145,8 @@ export function buildIcs(e: Pick<CalEvent, "date" | "time">, title: string, desc
     : [`DTSTART;VALUE=DATE:${compact(e.date)}`, `DTEND;VALUE=DATE:${compact(addDays(e.date, 1))}`];
   return [
     "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Langkah//Rehab//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH",
-    "BEGIN:VEVENT", `UID:${uid}`, `DTSTAMP:${dtstamp}`, ...when, `SUMMARY:${icsText(title)}`, `DESCRIPTION:${icsText(description)}`,
-    "BEGIN:VALARM", "ACTION:DISPLAY", `DESCRIPTION:${icsText(title)}`, "TRIGGER:-P1D", "END:VALARM",
+    "BEGIN:VEVENT", `UID:${uid}`, `DTSTAMP:${dtstamp}`, ...when, ...(opts.rrule ? [`RRULE:${opts.rrule}`] : []), `SUMMARY:${icsText(title)}`, `DESCRIPTION:${icsText(description)}`,
+    "BEGIN:VALARM", "ACTION:DISPLAY", `DESCRIPTION:${icsText(title)}`, `TRIGGER:${opts.alarm ?? "-P1D"}`, "END:VALARM",
     "END:VEVENT", "END:VCALENDAR", "",
   ].join("\r\n");
 }

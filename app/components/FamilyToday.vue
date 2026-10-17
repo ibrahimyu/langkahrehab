@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ArrowRight, CalendarDays, CheckCircle2, ChevronRight, CircleDot, Heart, Info, ListChecks, PhoneCall, RotateCw, Volume2, VolumeX } from "lucide-vue-next";
-import { weeklyNews, textOf, byTaskOrder } from "#shared/family";
+import { ArrowRight, Bell, CalendarDays, CheckCircle2, ChevronRight, CircleDot, Heart, Info, ListChecks, PhoneCall, RotateCw, Volume2, VolumeX } from "lucide-vue-next";
+import { weeklyNews, textOf, byTaskOrder, reminderDue, returnSoon } from "#shared/family";
 import { dayKey } from "#shared/calendar";
 import type { TextKey } from "#shared/i18n";
 
@@ -52,6 +52,11 @@ onMounted(() => {
 });
 
 const mine = computed(() => v.value.tasks.filter((t) => t.assigneeId === me.value?.id && t.status === "open").sort(byTaskOrder));
+// Reminders the person asked for, and borrowed items due back soon.
+const reminders = computed(() => {
+  const today = dayKey(Date.now());
+  return v.value.tasks.filter((t) => t.assigneeId === me.value?.id && (reminderDue(t, today) || (t.status === "open" && returnSoon(t, today))));
+});
 
 // This week's news: the saved update (AI or care team), or the same facts from the template.
 const news = computed(() => v.value.update?.text || weeklyNews(v.value.name, v.value.week, lang.value, dayText));
@@ -93,6 +98,15 @@ async function refresh() {
 
     <p v-if="thanks" class="thanks"><Heart class="ic" aria-hidden="true" /> {{ T("famThanks", { name: v.name }) }}</p>
 
+    <NuxtLink v-if="reminders.length" :to="`/family/${patientId}/tasks`" class="card remind-card">
+      <span class="my-tasks-ic" aria-hidden="true"><Bell class="ic" /></span>
+      <span class="my-tasks-text">
+        <b>{{ T("remToday") }}</b>
+        <span v-for="t in reminders" :key="t.id" class="hint">{{ t.sourcing?.status === "borrowed" && t.sourcing.returnBy ? T("navReturnSoon", { item: textOf(t.title, lang), from: t.sourcing.from || "—", date: dayText(t.sourcing.returnBy) }) : textOf(t.title, lang) }}<template v-if="t.reminder"> · {{ t.reminder.time }}</template></span>
+      </span>
+      <ArrowRight class="ic chev" aria-hidden="true" />
+    </NuxtLink>
+
     <NuxtLink :to="`/family/${patientId}/tasks`" class="card my-tasks">
       <span class="my-tasks-ic" aria-hidden="true"><ListChecks class="ic" /></span>
       <span class="my-tasks-text">
@@ -128,6 +142,7 @@ async function refresh() {
 </template>
 
 <style scoped>
+.remind-card { display: flex; gap: 12px; align-items: center; color: var(--ink); text-decoration: none; border: 1px solid var(--dawn); background: color-mix(in srgb, var(--dawn-soft) 55%, var(--surface)); }
 .fam-today { display: grid; gap: 14px; }
 .today-card { display: grid; gap: 10px; padding: 20px; }
 .today-head { display: flex; gap: 12px; align-items: flex-start; }

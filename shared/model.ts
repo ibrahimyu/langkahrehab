@@ -258,7 +258,29 @@ export type FamilyTask = {
   createdAt: string;
   doneAt: string | null;
   doneBy: string | null;
+  /** Repeating reminder until the task is done (shown in the app and added to the phone calendar). */
+  reminder?: TaskReminder | null;
+  /** How the family gets an item: options the navigator found, and where a borrowed one came from. */
+  sourcing?: Sourcing | null;
 };
+export const REMIND_EVERY = ["daily", "every_2_days", "weekly"] as const;
+export type TaskReminder = { every: (typeof REMIND_EVERY)[number]; time: string };
+export const SOURCE_KINDS = ["free", "borrow", "buy"] as const;
+export type SourceOption = { kind: (typeof SOURCE_KINDS)[number]; title: string; detail: string; cost: string; url: string | null };
+export const SOURCING_STATUS = ["looking", "borrowed", "bought", "received"] as const;
+export type Sourcing = {
+  status: (typeof SOURCING_STATUS)[number];
+  /** Who or where it came from ("Pak RT", "Puskesmas Cempaka"). */
+  from: string;
+  contact: string;
+  returnBy: string | null;
+  options: SourceOption[];
+  optionsAt: string | null;
+  optionsBy: "ai" | "template" | null;
+  city: string;
+};
+/** A suggested task a family member removed: it is not suggested to them again. */
+export type DismissedTask = { templateId: string; memberId: string | null };
 export const FAMILY_TASKS_MAX = 60;
 /** This week's news for the family (KEL-04): plain words, no diagnosis. */
 export type FamilyUpdate = { text: string; lang: Lang; generatedAt: string; by: "ai" | "template" | "care_team" };
@@ -289,6 +311,7 @@ export type Patient = {
   preferences: Preferences;
   family: FamilyMember[];
   familyTasks: FamilyTask[];
+  dismissedTasks?: DismissedTask[];
   familyUpdate: FamilyUpdate | null;
   letters: DischargeLetter[];
   /** FIS-06: progression proposals, newest last (max 20). At most one is pending. */
@@ -363,6 +386,7 @@ export function withDefaults(p: Patient): Patient {
   p.notes ??= [];
   p.family ??= [];
   p.familyTasks ??= [];
+  p.dismissedTasks ??= [];
   p.familyUpdate ??= null;
   p.letters ??= [];
   p.proposals ??= [];

@@ -1,6 +1,6 @@
 import type { FamilyTask } from "#shared/model";
 import { newId } from "#shared/model";
-import { capTasks, familyView, generateFamilyTasks, loadsBody, sanitizeTaskInput, templateById, validId } from "#shared/family";
+import { capTasks, familyView, generateFamilyTasks, loadsBody, sanitizeOptions, sanitizeReminder, sanitizeSourcing, sanitizeTaskInput, templateById, validId } from "#shared/family";
 
 // Family tasks (KEL-03, DAT-03):
 //   { generate: true }      adds the template tasks the profile calls for (idempotent, no open duplicates)
@@ -33,6 +33,8 @@ export default defineEventHandler(async (event) => {
     if (b.templateId) {
       const tpl = templateById(b.templateId);
       if (!tpl) throw bad("Unknown task.");
+      // Undo of "don't suggest again": the suggestion is welcome again.
+      p.dismissedTasks = (p.dismissedTasks ?? []).filter((x) => x.templateId !== tpl.id || x.memberId !== assigneeId);
       task = { ...base, templateId: tpl.id, title: { ...tpl.title }, detail: { ...tpl.detail }, category: tpl.category, cost: tpl.cost, source: "template" };
     } else {
       if (!input.title) throw bad("Write what needs doing.");
@@ -40,6 +42,14 @@ export default defineEventHandler(async (event) => {
         throw createError({ statusCode: 400, statusMessage: "Tasks about standing or walking come from the physio.", data: { code: "body_task" } });
       task = { ...base, templateId: null, title: input.title, detail: input.detail, category: input.category, cost: input.cost, source: actor.role === "family" ? "family" : "care_team" };
     }
+    task.reminder = b.reminder ? sanitizeReminder(b.reminder) : null;
+    if (b.sourcing && typeof b.sourcing === "object")
+      task.sourcing = {
+        ...sanitizeSourcing(b.sourcing, null),
+        options: sanitizeOptions(b.sourcing.options),
+        optionsAt: typeof b.sourcing.optionsAt === "string" ? b.sourcing.optionsAt.slice(0, 30) : null,
+        optionsBy: b.sourcing.optionsBy === "ai" || b.sourcing.optionsBy === "template" ? b.sourcing.optionsBy : null,
+      };
     p.familyTasks = capTasks([...p.familyTasks, task]);
   });
   return familyView(p, now);

@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { Check, ChevronRight, Plus, Save, Trash2, UserPlus } from "lucide-vue-next";
-import { byTaskOrder, loadsBody, shareText, textOf } from "#shared/family";
+import { Bell, CalendarPlus, Check, ChevronRight, ExternalLink, MapPin, Plus, Save, Search, Sparkles, Trash2, UserPlus } from "lucide-vue-next";
+import { buildIcs } from "#shared/calendar";
+import { byTaskOrder, emptySourcing, loadsBody, needsItem, reminderRule, shareText, textOf } from "#shared/family";
 import type { TextKey } from "#shared/i18n";
-import { TASK_COSTS, type FamilyTask, type TaskCost } from "#shared/model";
+import { REMIND_EVERY, SOURCING_STATUS, type FamilyTask, type Sourcing, type TaskReminder } from "#shared/model";
 
 // Family tasks (KEL-03, kit Checklist): my jobs with big check boxes, jobs nobody has taken yet,
 // and what the others are doing. Late tasks are never red. Tasks come from approved templates;
@@ -39,10 +40,72 @@ const take = (t: FamilyTask) => send(`/tasks/${t.id}`, "PATCH", { assigneeId: me
 // ---- Detail sheet: read, reassign, change the date, edit own words, share, delete ----
 const openId = ref<string | null>(null);
 const current = computed(() => v.value.tasks.find((t) => t.id === openId.value) ?? null);
-const edit = reactive({ title: "", detail: "", assigneeId: null as string | null, dueDate: "", cost: "free" as TaskCost });
+const edit = reactive({ title: "", detail: "", assigneeId: null as string | null, dueDate: "" });
 function openTask(t: FamilyTask) {
   openId.value = t.id;
-  Object.assign(edit, { title: title(t), detail: textOf(t.detail, lang.value), assigneeId: t.assigneeId, dueDate: t.dueDate ?? "", cost: t.cost });
+  Object.assign(edit, { title: title(t), detail: textOf(t.detail, lang.value), assigneeId: t.assigneeId, dueDate: t.dueDate ?? "" });
+  Object.assign(src, sourcingForm(t.sourcing));
+  remind.value = t.reminder ? { ...t.reminder } : null;
+}
+
+// ---- Getting an item: the navigator finds options; the family notes where a borrowed one came from ----
+const lastCity = () => v.value.tasks.map((t) => t.sourcing?.city).find(Boolean) ?? "";
+const sourcingForm = (x: Sourcing | null | undefined) => {
+  const s = x ?? emptySourcing(lastCity());
+  return { status: s.status, from: s.from, contact: s.contact, returnBy: s.returnBy ?? "", city: s.city || lastCity() };
+};
+const src = reactive({ status: "looking" as Sourcing["status"], from: "", contact: "", returnBy: "", city: "" });
+const finding = ref(false);
+async function find() {
+  const t = current.value;
+  if (!t) return;
+  finding.value = true;
+  await send(`/tasks/${t.id}/find`, "POST", { city: src.city, lang: lang.value });
+  finding.value = false;
+}
+async function saveSourcing() {
+  const t = current.value;
+  if (!t) return;
+  const before = t.sourcing ?? null;
+  const r = await send(`/tasks/${t.id}`, "PATCH", { sourcing: { ...src, returnBy: src.returnBy || null } }, { quiet: true });
+  if (r === true) toast.show(T("saved"), { tone: "good", ms: 1800, undo: () => void send(`/tasks/${t.id}`, "PATCH", { sourcing: before ?? emptySourcing() }) });
+  else toast.show(r, { tone: "bad" });
+}
+
+// ---- Reminder: in the app, and repeated by the phone's own calendar ----
+const remind = ref<TaskReminder | null>(null);
+async function saveReminder(next: TaskReminder | null) {
+  const t = current.value;
+  if (!t) return;
+  const before = t.reminder ?? null;
+  remind.value = next;
+  const r = await send(`/tasks/${t.id}`, "PATCH", { reminder: next }, { quiet: true });
+  if (r !== true) return toast.show(r, { tone: "bad" });
+  if (next || before)
+    toast.show(T("saved"), {
+      tone: "good",
+      ms: 1800,
+      undo: () => {
+        remind.value = before;
+        void send(`/tasks/${t.id}`, "PATCH", { reminder: before });
+      },
+    });
+}
+function addToCalendar(t: FamilyTask) {
+  if (!remind.value) return;
+  const start = new Date().toISOString().slice(0, 10);
+  const ics = buildIcs({ date: start, time: remind.value.time }, `${title(t)} (Langkah)`, T("remCalendarNote"), `${t.id}-reminder@langkah`, Date.now(), {
+    rrule: reminderRule(remind.value, t.dueDate),
+    alarm: "PT0M",
+  });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([ics], { type: "text/calendar;charset=utf-8" }));
+  a.download = "langkah-reminder.ics";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+function setTime(e: Event) {
+  if (remind.value) void saveReminder({ every: remind.value.every, time: (e.target as HTMLInputElement).value });
 }
 const own = computed(() => !!current.value && !current.value.templateId);
 const editError = ref("");
@@ -53,7 +116,7 @@ async function saveTask() {
   editError.value = "";
   if (own.value && loadsBody(`${edit.title} ${edit.detail}`)) return (editError.value = T("famBodyTaskNo"));
   const body: Record<string, unknown> = { assigneeId: edit.assigneeId, dueDate: edit.dueDate || null };
-  if (own.value) Object.assign(body, { title: edit.title, detail: edit.detail, cost: edit.cost });
+  if (own.value) Object.assign(body, { title: edit.title, detail: edit.detail });
   saving.value = true;
   const r = await send(`/tasks/${t.id}`, "PATCH", body, { quiet: true });
   saving.value = false;
@@ -63,20 +126,23 @@ async function saveTask() {
   } else editError.value = r === "body_task" ? T("famBodyTaskNo") : r;
 }
 function restoreBody(t: FamilyTask) {
-  const base = { assigneeId: t.assigneeId, dueDate: t.dueDate, status: t.status, doneBy: t.doneBy };
-  return t.templateId ? { ...base, templateId: t.templateId } : { ...base, title: String(t.title), detail: String(t.detail), category: t.category, cost: t.cost };
+  const base = { assigneeId: t.assigneeId, dueDate: t.dueDate, status: t.status, doneBy: t.doneBy, reminder: t.reminder ?? null, sourcing: t.sourcing ?? null };
+  return t.templateId ? { ...base, templateId: t.templateId } : { ...base, title: String(t.title), detail: String(t.detail), category: t.category };
 }
+/** A suggested task removed by the person it was given to is not suggested to them again (Undo brings both back). */
 async function remove(t: FamilyTask) {
   openId.value = null;
-  if ((await send(`/tasks/${t.id}`, "DELETE")) === true) toast.show(T("famTaskDeleted"), { tone: "good", undo: () => void send("/tasks", "POST", restoreBody(t)) });
+  const dismiss = !!t.templateId;
+  if ((await send(`/tasks/${t.id}${dismiss ? "?dismiss=1" : ""}`, "DELETE")) === true)
+    toast.show(dismiss ? T("famDismissed") : T("famTaskDeleted"), { tone: "good", undo: () => void send("/tasks", "POST", restoreBody(t)) });
 }
 
 // ---- Add a task ----
 const adding = ref(false);
-const draft = reactive({ title: "", detail: "", assigneeId: null as string | null, dueDate: "", cost: "free" as TaskCost });
+const draft = reactive({ title: "", detail: "", assigneeId: null as string | null, dueDate: "", item: false });
 const addError = ref("");
 function startAdd() {
-  Object.assign(draft, { title: "", detail: "", assigneeId: me.value?.id ?? null, dueDate: "", cost: "free" });
+  Object.assign(draft, { title: "", detail: "", assigneeId: me.value?.id ?? null, dueDate: "", item: false });
   addError.value = "";
   adding.value = true;
 }
@@ -84,7 +150,7 @@ async function addTask() {
   addError.value = "";
   if (loadsBody(`${draft.title} ${draft.detail}`)) return (addError.value = T("famBodyTaskNo"));
   saving.value = true;
-  const r = await send("/tasks", "POST", { ...draft, dueDate: draft.dueDate || null, category: "admin" }, { quiet: true });
+  const r = await send("/tasks", "POST", { title: draft.title, detail: draft.detail, assigneeId: draft.assigneeId, dueDate: draft.dueDate || null, category: draft.item ? "equipment" : "admin" }, { quiet: true });
   saving.value = false;
   if (r === true) {
     adding.value = false;
@@ -109,7 +175,7 @@ async function addTask() {
         <button class="task-body" @click="openTask(t)">
           <span class="task-title">{{ title(t) }}</span>
           <span class="task-meta">
-            <span class="pill" :class="`cost-${t.cost}`">{{ T(`cost_${t.cost}` as TextKey) }}</span>
+            <TaskBadges :task="t" />
             <span v-if="t.dueDate && t.status === 'open'" class="hint">{{ T("famBy", { date: dayText(t.dueDate) }) }}</span>
           </span>
         </button>
@@ -131,7 +197,7 @@ async function addTask() {
         <li v-for="t in unassigned" :key="t.id" class="task">
           <button class="task-body" @click="openTask(t)">
             <span class="task-title">{{ title(t) }}</span>
-            <span class="task-meta"><span class="pill" :class="`cost-${t.cost}`">{{ T(`cost_${t.cost}` as TextKey) }}</span></span>
+            <span class="task-meta"><TaskBadges :task="t" /></span>
           </button>
           <button class="ghost small-btn" @click="take(t)"><UserPlus class="ic" aria-hidden="true" /> {{ T("famTakeIt") }}</button>
         </li>
@@ -152,19 +218,59 @@ async function addTask() {
     <UiSheet :open="!!current" :title="current ? title(current) : ''" @close="openId = null">
       <template v-if="current">
         <p v-if="current.detail && !own" class="detail-text">{{ textOf(current.detail, lang) }}</p>
-        <p class="task-meta">
-          <span class="pill" :class="`cost-${current.cost}`">{{ T(`cost_${current.cost}` as TextKey) }}</span>
-          <span v-if="current.source === 'template'" class="hint">{{ T("famFromTemplate") }}</span>
-        </p>
+        <p v-if="current.source === 'template' || current.source === 'rule'" class="task-meta"><span class="pill"><Sparkles class="ic" aria-hidden="true" /> {{ T("famSuggested") }}</span></p>
+
+        <!-- Navigator: how to get the item, and where a borrowed one came from -->
+        <section v-if="needsItem(current)" class="nav-box">
+          <h3><MapPin class="ic" aria-hidden="true" /> {{ T("navTitle") }}</h3>
+          <form class="nav-find" @submit.prevent="find">
+            <label class="field"><span>{{ T("navCity") }}</span><input v-model="src.city" maxlength="60" autocomplete="address-level2" /></label>
+            <button class="ghost" :disabled="finding"><Search class="ic" aria-hidden="true" /> {{ finding ? T("navFinding") : current.sourcing?.options.length ? T("navAgain") : T("navFind") }}</button>
+          </form>
+          <template v-if="current.sourcing?.options.length">
+            <ul class="nav-options">
+              <li v-for="(o, i) in current.sourcing.options" :key="i" class="nav-option">
+                <span class="pill" :class="`kind-${o.kind}`">{{ T(`navKind_${o.kind}` as TextKey) }}</span>
+                <b>{{ o.title }}</b>
+                <span>{{ o.detail }}</span>
+                <span v-if="o.cost" class="hint">{{ o.cost }}</span>
+                <a v-if="o.url" :href="o.url" target="_blank" rel="noopener" class="link with-ic">{{ T("navOpen") }} <ExternalLink class="ic" aria-hidden="true" /></a>
+              </li>
+            </ul>
+            <p class="hint">{{ current.sourcing.optionsBy === "ai" ? T("navByAi") : T("navByTemplate") }}</p>
+          </template>
+          <div class="field"><span>{{ T("navStatus") }}</span>
+            <div class="chip-row">
+              <button v-for="st in SOURCING_STATUS" :key="st" type="button" class="choice" :class="{ on: src.status === st }" :aria-pressed="src.status === st" @click="src.status = st">{{ T(`navStatus_${st}` as TextKey) }}</button>
+            </div>
+          </div>
+          <template v-if="src.status !== 'looking'">
+            <label class="field"><span>{{ T("navFrom") }}</span><input v-model="src.from" maxlength="80" /></label>
+            <template v-if="src.status === 'borrowed'">
+              <label class="field"><span>{{ T("navContact") }}</span><input v-model="src.contact" maxlength="60" inputmode="tel" /></label>
+              <label class="field"><span>{{ T("navReturnBy") }}</span><input v-model="src.returnBy" type="date" /></label>
+            </template>
+          </template>
+          <button class="ghost big-btn" @click="saveSourcing"><Save class="ic" aria-hidden="true" /> {{ T("save") }}</button>
+        </section>
+
+        <!-- Reminder -->
+        <section v-if="current.status === 'open'" class="nav-box">
+          <h3><Bell class="ic" aria-hidden="true" /> {{ T("remTitle") }}</h3>
+          <div class="chip-row">
+            <button type="button" class="choice" :class="{ on: !remind }" @click="saveReminder(null)">{{ T("remOff") }}</button>
+            <button v-for="e in REMIND_EVERY" :key="e" type="button" class="choice" :class="{ on: remind?.every === e }" @click="saveReminder({ every: e, time: remind?.time ?? '08:00' })">{{ T(`remEvery_${e}` as TextKey) }}</button>
+          </div>
+          <template v-if="remind">
+            <label class="field"><span>{{ T("remTime") }}</span><input :value="remind.time" type="time" @change="setTime" /></label>
+            <button class="ghost big-btn" @click="addToCalendar(current)"><CalendarPlus class="ic" aria-hidden="true" /> {{ T("remCalendar") }}</button>
+            <p class="hint">{{ T("remCalendarNote") }}</p>
+          </template>
+        </section>
         <form class="stack" @submit.prevent="saveTask">
           <template v-if="own">
             <label class="field"><span>{{ T("famTaskTitle") }}</span><input v-model="edit.title" maxlength="120" required /></label>
             <label class="field"><span>{{ T("famTaskDetail") }}</span><textarea v-model="edit.detail" rows="2" maxlength="400" /></label>
-            <div class="field"><span>{{ T("famCost") }}</span>
-              <div class="seg seg-full" role="group" :aria-label="T('famCost')">
-                <button v-for="c in TASK_COSTS" :key="c" type="button" :class="{ on: edit.cost === c }" @click="edit.cost = c">{{ T(`cost_${c}` as TextKey) }}</button>
-              </div>
-            </div>
           </template>
           <div class="field"><span>{{ T("famAssignTo") }}</span>
             <div class="chip-row">
@@ -177,7 +283,7 @@ async function addTask() {
         </form>
         <div class="controls">
           <FamilyShare :text="shareText([current], langOf(current.assigneeId))" />
-          <button class="ghost danger" @click="remove(current)"><Trash2 class="ic" aria-hidden="true" /> {{ T("delete") }}</button>
+          <button class="ghost danger" @click="remove(current)"><Trash2 class="ic" aria-hidden="true" /> {{ current.templateId ? T("famDismiss") : T("delete") }}</button>
         </div>
         <p v-if="current.assigneeId && current.assigneeId !== me?.id" class="hint">{{ nameOf(current.assigneeId) }}</p>
       </template>
@@ -188,11 +294,7 @@ async function addTask() {
       <form class="stack" @submit.prevent="addTask">
         <label class="field"><span>{{ T("famTaskTitle") }}</span><input v-model="draft.title" maxlength="120" required /></label>
         <label class="field"><span>{{ T("famTaskDetail") }}</span><textarea v-model="draft.detail" rows="2" maxlength="400" /></label>
-        <div class="field"><span>{{ T("famCost") }}</span>
-          <div class="seg seg-full" role="group" :aria-label="T('famCost')">
-            <button v-for="c in TASK_COSTS" :key="c" type="button" :class="{ on: draft.cost === c }" @click="draft.cost = c">{{ T(`cost_${c}` as TextKey) }}</button>
-          </div>
-        </div>
+        <label class="check inline"><input v-model="draft.item" type="checkbox" /> {{ T("famNeedsItem") }}</label>
         <div class="field"><span>{{ T("famAssignTo") }}</span>
           <div class="chip-row">
             <button v-for="m in v.family" :key="m.id" type="button" class="choice" :class="{ on: draft.assigneeId === m.id }" :aria-pressed="draft.assigneeId === m.id" @click="draft.assigneeId = m.id">{{ m.id === me?.id ? T("famYou") : m.name }}</button>
@@ -224,9 +326,14 @@ async function addTask() {
 .task-title { font-weight: 600; font-size: 1.0625rem; }
 .task.done .task-title { color: var(--ink-3); text-decoration: line-through; }
 .task-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.cost-free { background: var(--good-soft); color: var(--good-ink); }
-.cost-borrow { background: var(--info-soft); color: var(--info-ink); }
-.cost-buy { background: var(--sunken); color: var(--ink-2); }
+.nav-box { display: grid; gap: 10px; padding: 14px; border-radius: var(--r-card); background: var(--sunken); }
+.nav-box h3 { display: flex; gap: 8px; align-items: center; font-size: 1.0625rem; }
+.nav-find { display: grid; gap: 8px; }
+.nav-options { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.nav-option { display: grid; gap: 4px; justify-items: start; padding: 12px; border-radius: 12px; background: var(--surface); }
+.kind-free { background: var(--good-soft); color: var(--good-ink); }
+.kind-borrow { background: var(--info-soft); color: var(--info-ink); }
+.kind-buy { background: var(--sunken); color: var(--ink-2); }
 .chev { color: var(--ink-3); flex: none; }
 .empty { text-align: center; color: var(--ink-2); }
 .tasks-section { display: grid; gap: 10px; margin-top: 8px; }

@@ -87,3 +87,29 @@ test("weekly news and share text use the reader's language", () => {
   assert.match(text, /Kosongkan jalur/);
   assert.match(text, /— Langkah$/);
 });
+
+test("a suggestion removed by one person is not given to them again", async () => {
+  const { generateFamilyTasks } = await import("../shared/family.ts");
+  const base = { profile: { cause: "trauma", restrictions: "", stage: "post_op", level: "below_knee", side: "left" }, plan: { reviewDate: null }, familyTasks: [] } as any;
+  const family = [
+    { id: "a", name: "A", relation: "spouse", lang: "id", phone: null, livesWithPatient: true },
+    { id: "b", name: "B", relation: "child", lang: "id", phone: null, livesWithPatient: true },
+  ];
+  const first = generateFamilyTasks({ ...base, family, dismissedTasks: [] }, Date.now());
+  const tpl = first[0]!.templateId!;
+  const again = generateFamilyTasks({ ...base, family, dismissedTasks: [{ templateId: tpl, memberId: "a" }] }, Date.now());
+  assert.ok(again.filter((t) => t.templateId === tpl).every((t) => t.assigneeId === "b"));
+  const none = generateFamilyTasks({ ...base, family, dismissedTasks: [{ templateId: tpl, memberId: null }] }, Date.now());
+  assert.ok(!none.some((t) => t.templateId === tpl));
+});
+
+test("reminders repeat on their day and options keep only safe links", async () => {
+  const { reminderDue, sanitizeOptions, reminderRule } = await import("../shared/family.ts");
+  const t = { status: "open", createdAt: "2026-10-01T08:00:00Z", reminder: { every: "every_2_days", time: "08:00" } } as any;
+  assert.equal(reminderDue(t, "2026-10-03"), true);
+  assert.equal(reminderDue(t, "2026-10-04"), false);
+  assert.equal(reminderDue({ ...t, status: "done" }, "2026-10-03"), false);
+  assert.equal(reminderRule(t.reminder, "2026-10-20"), "FREQ=DAILY;INTERVAL=2;UNTIL=20261020T235959");
+  const opts = sanitizeOptions([{ kind: "buy", title: "Shop", url: "javascript:alert(1)" }, { kind: "free", title: "BPJS", url: "https://bpjs-kesehatan.go.id" }, { title: "" }]);
+  assert.deepEqual(opts.map((o) => [o.kind, o.url]), [["free", "https://bpjs-kesehatan.go.id"], ["buy", null]]);
+});

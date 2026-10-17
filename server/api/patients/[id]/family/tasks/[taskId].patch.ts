@@ -1,4 +1,4 @@
-import { familyView, loadsBody, sanitizeTaskInput, validId } from "#shared/family";
+import { familyView, loadsBody, sanitizeReminder, sanitizeSourcing, sanitizeTaskInput, validId } from "#shared/family";
 
 // Marks a task done or open (family), or changes who does it, the date, or the words of a task
 // written by a person (template words stay as the care team approved them).
@@ -17,6 +17,11 @@ export default defineEventHandler(async (event) => {
       t.status = done ? "done" : "open";
       t.doneAt = done ? iso : null;
       t.doneBy = done ? validId(b.by) : null;
+    }
+    if (b.reminder !== undefined || b.sourcing !== undefined) {
+      assertCan(actor, "familyTask.do");
+      if (b.reminder !== undefined) t.reminder = b.reminder === null ? null : sanitizeReminder(b.reminder);
+      if (b.sourcing !== undefined) t.sourcing = sanitizeSourcing(b.sourcing, t.sourcing);
     }
     const edits = ["assigneeId", "dueDate", "title", "detail", "cost"].some((k) => b[k] !== undefined);
     if (!edits) return;

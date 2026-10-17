@@ -11,6 +11,9 @@ import {
   FAMILY_TASKS_MAX,
   TASK_CATEGORIES,
   TASK_COSTS,
+  REMIND_EVERY,
+  SOURCE_KINDS,
+  SOURCING_STATUS,
   newId,
   pick,
   pickLang,
@@ -20,6 +23,9 @@ import {
   type FamilyTask,
   type FamilyUpdate,
   type Patient,
+  type SourceOption,
+  type Sourcing,
+  type TaskReminder,
   type Text3,
 } from "./model";
 
@@ -79,7 +85,7 @@ function covered(tpl: TaskTemplate, tasks: FamilyTask[], p: Pick<Patient, "plan"
  * get the home jobs; members further away get papers and visit questions. Each task goes to whoever
  * has the fewest open tasks. Never adds a copy of a template that is still open.
  */
-export function generateFamilyTasks(p: Pick<Patient, "profile" | "plan" | "family" | "familyTasks">, now: number): FamilyTask[] {
+export function generateFamilyTasks(p: Pick<Patient, "profile" | "plan" | "family" | "familyTasks" | "dismissedTasks">, now: number): FamilyTask[] {
   if (!p.family.length) return [];
   const iso = new Date(now).toISOString();
   const all = [...p.familyTasks];
@@ -87,10 +93,16 @@ export function generateFamilyTasks(p: Pick<Patient, "profile" | "plan" | "famil
   const home = p.family.filter((m) => m.livesWithPatient);
   const away = p.family.filter((m) => !m.livesWithPatient);
   const made: FamilyTask[] = [];
+  const dismissed = p.dismissedTasks ?? [];
   for (const tpl of wanted(p, now)) {
     if (covered(tpl, all, p, now)) continue;
+    // Someone who removed this suggestion is never given it again; removed for everyone = not suggested.
+    const refused = new Set(dismissed.filter((d) => d.templateId === tpl.id).map((d) => d.memberId));
+    if (refused.has(null)) continue;
     const isHome = HOME.includes(tpl.category);
-    const pool = (isHome ? home : away).length ? (isHome ? home : away) : p.family;
+    const preferred = (isHome ? home : away).filter((m) => !refused.has(m.id));
+    const pool = preferred.length ? preferred : p.family.filter((m) => !refused.has(m.id));
+    if (!pool.length) continue;
     const who = pool.reduce((a, b) => ((load.get(b.id) ?? 0) < (load.get(a.id) ?? 0) ? b : a));
     load.set(who.id, (load.get(who.id) ?? 0) + 1);
     const task: FamilyTask = {
@@ -114,10 +126,64 @@ export function generateFamilyTasks(p: Pick<Patient, "profile" | "plan" | "famil
   return made;
 }
 
-/** Free first, then borrow, then buy; open before done. */
-const costRank = { free: 0, borrow: 1, buy: 2 } as const;
+/** Open before done; the nearest date first; then the oldest. */
 export const byTaskOrder = (a: FamilyTask, b: FamilyTask) =>
-  Number(a.status === "done") - Number(b.status === "done") || costRank[a.cost] - costRank[b.cost] || a.createdAt.localeCompare(b.createdAt);
+  Number(a.status === "done") - Number(b.status === "done") ||
+  (a.dueDate ?? "9999").localeCompare(b.dueDate ?? "9999") ||
+  a.createdAt.localeCompare(b.createdAt);
+
+// ---- Getting an item (navigator) and reminders ----
+
+/** Tasks about getting a thing: the navigator helps find it, and tracks a borrowed one. */
+const ITEM_TEMPLATES = new Set(["bathroom_mat", "chair_with_arms", "borrow_walker"]);
+export const needsItem = (t: Pick<FamilyTask, "category" | "templateId">) => t.category === "equipment" || ITEM_TEMPLATES.has(t.templateId ?? "");
+
+export const emptySourcing = (city = ""): Sourcing => ({ status: "looking", from: "", contact: "", returnBy: null, options: [], optionsAt: null, optionsBy: null, city });
+
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
+export function sanitizeReminder(b: any): TaskReminder | null {
+  if (!b || typeof b !== "object") return null;
+  const every = pick(b.every, REMIND_EVERY, "daily");
+  return { every, time: typeof b.time === "string" && TIME.test(b.time) ? b.time : "08:00" };
+}
+/** The family's own sourcing fields; the options list is only written by the server. */
+export function sanitizeSourcing(b: any, current: Sourcing | null | undefined): Sourcing {
+  const base = current ?? emptySourcing();
+  return {
+    ...base,
+    status: pick(b?.status, SOURCING_STATUS, base.status),
+    from: b?.from !== undefined ? str(b.from, 80) : base.from,
+    contact: b?.contact !== undefined ? str(b.contact, 60) : base.contact,
+    returnBy: b?.returnBy !== undefined ? (typeof b.returnBy === "string" && DATE.test(b.returnBy) ? b.returnBy : null) : base.returnBy,
+    city: b?.city !== undefined ? str(b.city, 60) : base.city,
+  };
+}
+const safeUrl = (v: unknown) => (typeof v === "string" && /^https:\/\/[^\s]{4,300}$/.test(v) ? v : null);
+/** Options from the model: at most 6, known kinds only, short text, https links only. */
+export function sanitizeOptions(raw: unknown): SourceOption[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((o: any) => ({ kind: pick(o?.kind, SOURCE_KINDS, "buy"), title: str(o?.title, 80), detail: str(o?.detail, 240), cost: str(o?.cost, 60), url: safeUrl(o?.url) }))
+    .filter((o) => o.title)
+    .sort((a, b) => SOURCE_KINDS.indexOf(a.kind) - SOURCE_KINDS.indexOf(b.kind))
+    .slice(0, 6);
+}
+
+const EVERY_DAYS = { daily: 1, every_2_days: 2, weekly: 7 } as const;
+/** Whether a reminder falls on this day (counted from the day the task was made). */
+export function reminderDue(t: FamilyTask, today: string): boolean {
+  if (!t.reminder || t.status === "done") return false;
+  const start = t.createdAt.slice(0, 10);
+  const days = Math.round((Date.parse(`${today}T12:00:00Z`) - Date.parse(`${start}T12:00:00Z`)) / DAY);
+  return days >= 0 && days % EVERY_DAYS[t.reminder.every] === 0;
+}
+/** RRULE for the phone calendar: repeats until the due date when there is one. */
+export const reminderRule = (r: TaskReminder, until: string | null) =>
+  `FREQ=DAILY;INTERVAL=${EVERY_DAYS[r.every]}${until ? `;UNTIL=${until.replace(/-/g, "")}T235959` : ""}`;
+/** A borrowed item due back within three days. */
+export const returnSoon = (t: FamilyTask, today: string) =>
+  t.sourcing?.status === "borrowed" && !!t.sourcing.returnBy && t.sourcing.returnBy <= addDays(today, 3);
 
 /** Plain text to share one or more tasks, in the reader's language, signed "— Langkah". */
 export function shareText(tasks: FamilyTask[], lang: Lang, heading?: string) {
