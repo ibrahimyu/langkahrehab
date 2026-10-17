@@ -196,8 +196,14 @@ const setsDone = (s: Patient["sessions"][number]) => `${s.exercises.reduce((n, e
         </div>
       </div>
       <p class="hint">{{ T("briefHint") }}</p>
-      <textarea v-model="briefText" :rows="compact ? 8 : 12" :placeholder="T('briefPlaceholder')" />
-      <button class="ghost" style="justify-self: start" :disabled="briefText === p.brief.text" @click="saveBrief">{{ T("saveEdits") }}</button>
+      <div v-if="briefBusy" class="brief-writing" role="status" aria-busy="true">
+        <span class="sk-line" /><span class="sk-line" /><span class="sk-line short" />
+        <span class="hint">{{ T("writing") }}</span>
+      </div>
+      <template v-else>
+        <textarea v-model="briefText" :rows="compact ? 8 : 12" :placeholder="T('briefPlaceholder')" />
+        <button class="ghost" style="justify-self: start" :disabled="briefText === p.brief.text" @click="saveBrief">{{ T("saveEdits") }}</button>
+      </template>
     </section>
 
     <section v-if="!bare" class="tile wide">
@@ -298,3 +304,11 @@ const setsDone = (s: Patient["sessions"][number]) => `${s.exercises.reduce((n, e
     </div>
   </div>
 </template>
+
+<style scoped>
+.brief-writing { display: grid; gap: 10px; padding: 14px; border-radius: var(--r-card); background: var(--surface); border: 1px solid var(--line); }
+.sk-line { display: block; height: 14px; width: 92%; border-radius: var(--r-pill); background: var(--sunken); animation: brief-pulse 1.4s var(--ease-out) infinite alternate; }
+.sk-line.short { width: 55%; }
+@keyframes brief-pulse { from { opacity: 1; } to { opacity: 0.55; } }
+@media (prefers-reduced-motion: reduce) { .sk-line { animation: none; } }
+</style>
