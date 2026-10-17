@@ -1,22 +1,30 @@
 <script setup lang="ts">
+import { Lock, Sparkles, TriangleAlert } from "lucide-vue-next";
 import { LANG_NAMES, LANGS, exercises, exerciseById, type Lang } from "#shared/exercises";
 import { locale, profileText, type TextKey } from "#shared/i18n";
+import { can } from "#shared/permissions";
 import { bySeverity, type Brief, type CareRole, type Patient, type PlanItem } from "#shared/model";
 import type { PatientStats } from "#shared/stats";
 
 // The care team's view of one patient: alerts, AI brief, plan editor, and (full view) the record.
+// `bare`: inside the record page (care/[id]), which shows the header, numbers, plan and record in its own tabs.
 // `compact` is the side panel in guided scenarios.
-const props = defineProps<{ patientId: string; compact?: boolean; role?: CareRole }>();
-const api = useApi();
+const props = defineProps<{ patientId: string; compact?: boolean; role?: CareRole; bare?: boolean }>();
 const lang = useLang();
 const T = useT();
 const version = useDataVersion();
-const role = computed<CareRole>(() => props.role ?? "physio");
+const signedIn = useRole();
+// Guided scenarios pass the dashboard's role; signed-in clinicians use their own account's role.
+const role = computed<CareRole>(() => props.role ?? (signedIn.value === "doctor" ? "doctor" : "physio"));
+const api = useApi(role);
+const canExercises = computed(() => can(role.value, "plan.exercises"));
+const canLimits = computed(() => can(role.value, "plan.limits"));
 
 const data = ref<{ patient: Patient; stats: PatientStats } | null>(null);
 const error = ref("");
 async function load() {
   try {
+    error.value = "";
     data.value = await api(`/api/patients/${props.patientId}`);
   } catch (e) {
     error.value = errorMessage(e);
@@ -27,13 +35,16 @@ watch(version, load);
 const p = computed(() => data.value?.patient);
 const stats = computed(() => data.value?.stats);
 
-async function act(work: () => Promise<unknown>) {
+/** Runs a change and reloads. Returns whether it worked, so callers never report success after a failure. */
+async function act(work: () => Promise<unknown>): Promise<boolean> {
   error.value = "";
   try {
     await work();
     version.value++;
+    return true;
   } catch (e) {
     error.value = errorMessage(e);
+    return false;
   }
 }
 
@@ -88,10 +99,18 @@ const addExercise = (exerciseId: string) => {
   if (e && !draft.items.some((i) => i.exerciseId === exerciseId)) draft.items.push({ exerciseId, sets: e.sets, reps: e.reps });
 };
 const unused = computed(() => exercises.filter((e) => !draft.items.some((i) => i.exerciseId === e.id)));
+// BUG-01: the editor closes and says "saved" only after the server confirms; on failure the draft stays.
+const savingPlan = ref(false);
+const planError = ref("");
 async function savePlan() {
-  await act(() => api(`/api/patients/${props.patientId}/plan`, { method: "PUT", body: { ...draft, role: role.value } }));
-  editing.value = false;
-  justSaved.value = true;
+  savingPlan.value = true;
+  planError.value = "";
+  const ok = await act(() => api(`/api/patients/${props.patientId}/plan`, { method: "PUT", body: { ...draft, role: role.value } }));
+  savingPlan.value = false;
+  if (ok) {
+    editing.value = false;
+    justSaved.value = true;
+  } else planError.value = error.value;
 }
 
 // Check-ins
@@ -103,14 +122,14 @@ const setsDone = (s: Patient["sessions"][number]) => `${s.exercises.reduce((n, e
 <template>
   <p v-if="error" class="error">{{ error }}</p>
   <div v-if="p && stats" class="care-panel">
-    <header class="care-head">
+    <header v-if="!bare" class="care-head">
       <p class="eyebrow">{{ T("careTeam") }} · {{ roleName(role) }}</p>
       <h2>{{ p.name }}, {{ p.age }}</h2>
       <p class="hint">{{ profileText(lang, p.profile) }}</p>
     </header>
 
     <div class="care-bento">
-    <dl class="stats">
+    <dl v-if="!bare" class="stats">
       <div><dt>{{ T("adherence") }}</dt><dd>{{ stats.setAdherencePct ?? "–" }}%</dd></div>
       <div><dt>{{ T("avgPainAfter") }}</dt><dd>{{ stats.avgPainAfter ?? "–" }}</dd></div>
       <div><dt>{{ T("phantomLast") }}</dt><dd>{{ stats.phantomPainLast ?? "–" }}</dd></div>
@@ -123,24 +142,24 @@ const setsDone = (s: Patient["sessions"][number]) => `${s.exercises.reduce((n, e
         <li v-for="a in openAlerts" :key="a.id">
           <span class="pill alert-pill" :class="a.severity">{{ T(`sev_${a.severity}` as TextKey) }}</span>
           <span class="msg"><b>{{ T(`kind_${a.kind}` as TextKey) }}</b> · {{ a.message }} <span class="hint">· {{ day(a.at) }} · {{ T("forRoles", { who: a.for.map(roleName).join(" & ") }) }}</span></span>
-          <button class="ghost small-btn" @click="resolve(a.id)">{{ T("markHandled") }}</button>
+          <button v-if="can(role, 'alert.resolve', { alert: a })" class="ghost small-btn" @click="resolve(a.id)">{{ T("markHandled") }}</button>
         </li>
         <li v-if="!openAlerts.length" class="hint">{{ T("noAlerts") }}</li>
       </ul>
     </section>
 
     <section class="tile">
-      <span class="tile-label">✦ {{ T("aiActivity") }}</span>
+      <span class="tile-label"><Sparkles class="ic" aria-hidden="true" /> {{ T("aiActivity") }}</span>
       <ul class="activity">
         <li v-for="a in activity" :key="a.id">
-          <span class="dot" :class="{ alert: a.alert }">{{ a.alert ? "!" : "✦" }}</span>
+          <span class="dot" :class="{ alert: a.alert }"><TriangleAlert v-if="a.alert" class="ic" aria-hidden="true" /><Sparkles v-else class="ic" aria-hidden="true" /></span>
           <span><b>{{ a.title }}</b><br /><span class="hint">{{ a.detail }} · {{ day(a.at) }}</span></span>
         </li>
         <li v-if="!activity.length" class="hint">{{ T("noActivity") }}</li>
       </ul>
     </section>
 
-    <section class="tile">
+    <section v-if="!bare" class="tile">
       <span class="tile-label">{{ T("pain") }}</span>
       <div class="bars">
         <div v-for="s in painSeries" :key="s.id" class="bar-col" :title="`${day(s.at)}: ${s.painBefore} → ${s.painAfter}`">
@@ -168,7 +187,7 @@ const setsDone = (s: Patient["sessions"][number]) => `${s.exercises.reduce((n, e
 
     <section class="tile wide">
       <div class="bar">
-        <h3>✦ {{ T("aiBrief") }}</h3>
+        <h3 class="with-ic"><Sparkles class="ic" aria-hidden="true" /> {{ T("aiBrief") }}</h3>
         <div class="controls">
           <select v-model="briefLang" class="auto">
             <option v-for="l in LANGS" :key="l" :value="l">{{ LANG_NAMES[l] }}</option>
@@ -181,7 +200,7 @@ const setsDone = (s: Patient["sessions"][number]) => `${s.exercises.reduce((n, e
       <button class="ghost" style="justify-self: start" :disabled="briefText === p.brief.text" @click="saveBrief">{{ T("saveEdits") }}</button>
     </section>
 
-    <section class="tile wide">
+    <section v-if="!bare" class="tile wide">
       <div class="bar">
         <h3>{{ T("plan") }} <span class="hint">{{ T("planMeta", { v: p.plan.version, date: day(p.plan.updatedAt), who: roleName(p.plan.updatedBy) }) }}</span></h3>
         <button v-if="!editing" class="ghost" @click="editPlan">{{ T("editPlan") }}</button>
@@ -194,34 +213,50 @@ const setsDone = (s: Patient["sessions"][number]) => `${s.exercises.reduce((n, e
         <p v-if="justSaved" class="good-text">{{ T("planSaved") }}</p>
       </template>
       <template v-else>
-        <table>
-          <thead><tr><th>{{ T("exercise") }}</th><th>{{ T("sets") }}</th><th>{{ T("repsLabel") }}</th><th></th></tr></thead>
-          <tbody>
-            <tr v-for="(i, n) in draft.items" :key="i.exerciseId">
-              <td>{{ exerciseById(i.exerciseId)?.name[lang] }}</td>
-              <td><input v-model.number="i.sets" class="small" type="number" min="1" max="5" /></td>
-              <td><input v-model.number="i.reps" class="small" type="number" min="1" max="30" /></td>
-              <td><button class="link" @click="draft.items.splice(n, 1)">{{ T("remove") }}</button></td>
-            </tr>
-          </tbody>
-        </table>
-        <select v-if="unused.length" class="auto" @change="addExercise(($event.target as HTMLSelectElement).value); ($event.target as HTMLSelectElement).value = ''">
-          <option value="">{{ T("addExercise") }}</option>
-          <option v-for="e in unused" :key="e.id" :value="e.id">{{ e.name[lang] }}</option>
-        </select>
-        <label class="field"><span>{{ T("noteToPatient") }}</span><input v-model="draft.note" /></label>
-        <div class="row">
-          <label><span>{{ T("painLimit") }}</span><input v-model.number="draft.painThreshold" type="number" min="1" max="10" /></label>
+        <!-- ROL-05: each role edits only what it owns; the rest is shown read-only with who sets it. -->
+        <template v-if="canExercises">
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>{{ T("exercise") }}</th><th>{{ T("sets") }}</th><th>{{ T("repsLabel") }}</th><th></th></tr></thead>
+              <tbody>
+                <tr v-for="(i, n) in draft.items" :key="i.exerciseId">
+                  <td>{{ exerciseById(i.exerciseId)?.name[lang] }}</td>
+                  <td><input v-model.number="i.sets" class="small" type="number" min="1" max="5" inputmode="numeric" /></td>
+                  <td><input v-model.number="i.reps" class="small" type="number" min="1" max="30" inputmode="numeric" /></td>
+                  <td><button class="link" @click="draft.items.splice(n, 1)">{{ T("remove") }}</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <select v-if="unused.length" class="auto" @change="addExercise(($event.target as HTMLSelectElement).value); ($event.target as HTMLSelectElement).value = ''">
+            <option value="">{{ T("addExercise") }}</option>
+            <option v-for="e in unused" :key="e.id" :value="e.id">{{ e.name[lang] }}</option>
+          </select>
+          <label class="field"><span>{{ T("noteToPatient") }}</span><input v-model="draft.note" maxlength="300" /></label>
+        </template>
+        <div v-else class="readonly">
+          <ul class="exercise-list">
+            <li v-for="i in draft.items" :key="i.exerciseId"><b>{{ exerciseById(i.exerciseId)?.name[lang] }}</b> <span class="dose">{{ T("setsReps", { sets: i.sets, reps: i.reps }) }}</span></li>
+          </ul>
+          <p class="hint"><Lock class="ic" aria-hidden="true" /> {{ T("setByPhysio") }}</p>
+        </div>
+        <div v-if="canLimits" class="row">
+          <label><span>{{ T("painLimit") }}</span><input v-model.number="draft.painThreshold" type="number" min="1" max="10" inputmode="numeric" /></label>
           <label><span>{{ T("reviewDate") }}</span><input v-model="draft.reviewDate" type="date" /></label>
         </div>
-        <div class="controls">
-          <button class="primary" @click="savePlan">{{ T("saveAs", { v: p.plan.version + 1 }) }}</button>
-          <button class="ghost" @click="editing = false">{{ T("cancel") }}</button>
+        <div v-else class="readonly">
+          <p>{{ T("planSummary", { limit: draft.painThreshold, date: draft.reviewDate }) }}</p>
+          <p class="hint"><Lock class="ic" aria-hidden="true" /> {{ T("setByDoctor") }}</p>
         </div>
+        <div class="controls">
+          <button class="primary" :disabled="savingPlan" @click="savePlan">{{ savingPlan ? T("saving") : planError ? T("tryAgain") : T("saveAs", { v: p.plan.version + 1 }) }}</button>
+          <button class="ghost" :disabled="savingPlan" @click="editing = false">{{ T("cancel") }}</button>
+        </div>
+        <p v-if="planError" class="error" role="alert">{{ T("planNotSaved") }} {{ planError }}</p>
       </template>
     </section>
 
-    <template v-if="!compact">
+    <template v-if="!compact && !bare">
       <section class="tile wide">
         <h3>{{ T("sessions") }}</h3>
         <table>
@@ -250,7 +285,7 @@ const setsDone = (s: Patient["sessions"][number]) => `${s.exercises.reduce((n, e
         </section>
     </template>
 
-    <section class="tile wide">
+    <section v-if="!bare" class="tile wide">
       <span class="tile-label">{{ T("skinChecks") }}</span>
       <ul class="alerts">
         <li v-for="c in [...p.skinChecks].reverse().slice(0, compact ? 2 : 10)" :key="c.id">
