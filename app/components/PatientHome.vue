@@ -266,16 +266,13 @@ async function askCheckup() {
         <span class="pain-limit" :style="{ bottom: `${(p.plan.painThreshold / 10) * 100}%` }"><span>{{ T("painLimitN", { n: p.plan.painThreshold }) }}</span></span>
         <div v-for="s in painChart" :key="s.id" class="pain-col">
           <div class="pain-pair">
-            <i class="before" :style="{ height: `${((s.painBefore ?? 0) / 10) * 100}%` }" />
-            <i class="after" :class="{ high: s.painAfter !== null && s.painAfter >= p.plan.painThreshold }" :style="{ height: `${((s.painAfter ?? 0) / 10) * 100}%` }" />
+            <i class="before" :style="{ height: `${((s.painBefore ?? 0) / 10) * 100}%` }"><b>{{ s.painBefore ?? "" }}</b></i>
+            <i class="after" :class="{ high: s.painAfter !== null && s.painAfter >= p.plan.painThreshold }" :style="{ height: `${((s.painAfter ?? 0) / 10) * 100}%` }"><b>{{ s.painAfter ?? "" }}</b></i>
           </div>
           <span class="pain-day">{{ fmt(s.at, { day: "numeric" }) }}</span>
         </div>
       </div>
       <p class="pain-legend hint"><i class="before" /> {{ T("painBefore") }} <i class="after" /> {{ T("painAfterShort") }}</p>
-      <div v-if="painTrend && (painTrend.kind === 'up' || painTrend.kind === 'over')" class="pain-actions">
-        <NuxtLink :to="`${base}/talk`" class="ghost big-btn">{{ T("painTellTeam") }}</NuxtLink>
-      </div>
     </section>
     <ul v-if="p" class="detail-list">
       <li v-for="s in painList" :key="s.id">
@@ -299,14 +296,17 @@ async function askCheckup() {
 .pain-limit span { position: absolute; right: 0; top: -20px; font-size: 0.75rem; font-weight: 700; color: var(--danger-ink); background: var(--surface); padding: 0 4px; }
 .pain-col { display: grid; grid-template-rows: 1fr auto; min-width: 0; }
 .pain-pair { display: flex; gap: 2px; align-items: flex-end; justify-content: center; height: 100%; }
-.pain-pair i, .pain-legend i { display: inline-block; width: 8px; border-radius: 3px 3px 0 0; }
+.pain-pair i, .pain-legend i { display: inline-block; width: 12px; border-radius: 3px 3px 0 0; }
+.pain-pair i { position: relative; min-height: 2px; }
+.pain-pair i b { position: absolute; left: 50%; bottom: 100%; transform: translateX(-50%); font-size: 0.6875rem; font-style: normal; line-height: 1.4; color: var(--ink-2); }
+.pain-pair .after b { color: var(--ink); }
 .pain-pair .before, .pain-legend .before { background: var(--line-strong); }
 .pain-pair .after, .pain-legend .after { background: var(--pine); }
 .pain-pair .after.high { background: var(--danger-ink); }
 .pain-day { font-size: 0.6875rem; color: var(--ink-3); text-align: center; }
 .pain-legend { display: flex; gap: 6px; align-items: center; margin: 0; }
 .pain-legend i { height: 10px; margin-left: 6px; }
-.pain-actions .big-btn { display: flex; justify-content: center; text-decoration: none; }
+
 .now-card { gap: 8px; }
 .now-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .now-title { font: 700 1.25rem/1.3 var(--display); }
