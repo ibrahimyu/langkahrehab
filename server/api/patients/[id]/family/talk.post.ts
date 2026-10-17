@@ -1,5 +1,5 @@
 import { TALK_MAX_TURNS, screenReply, type TalkMessage } from "#shared/companion";
-import { familyView, textOf } from "#shared/family";
+import { familyView, loadsBody, textOf } from "#shared/family";
 import { DAY, pickLang, str } from "#shared/model";
 import { detectRedFlags } from "#shared/redflags";
 import { addAlerts, makeAlert } from "#shared/rules";
@@ -72,5 +72,10 @@ export default defineEventHandler(async (event) => {
   const reply = str(raw?.reply, 900);
   const issue = screenReply(reply);
   const action: Action = ACTIONS.includes(raw?.action) ? raw.action : "none";
-  return { mode: "reply", reply: issue ? "" : reply || "…", safeKey: issue, action, question: str(raw?.question, 300) };
+  // Jobs from the conversation, offered as tasks (the family confirms each). Never standing or walking.
+  const tasks = (Array.isArray(raw?.tasks) ? raw.tasks : [])
+    .map((x: any) => ({ title: str(x?.title, 120), detail: str(x?.detail, 400), item: !!x?.item }))
+    .filter((x: { title: string; detail: string }) => x.title && !loadsBody(`${x.title} ${x.detail}`))
+    .slice(0, 3);
+  return { mode: "reply", reply: issue ? "" : reply || "…", safeKey: issue, action, question: str(raw?.question, 300), tasks };
 });

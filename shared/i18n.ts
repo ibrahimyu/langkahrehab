@@ -471,6 +471,9 @@ const text = {
   famTalkRedFlag: { en: "This may need a check today. The clinic has been told. See when to contact the clinic below.", id: "Ini mungkin perlu diperiksa hari ini. Klinik sudah diberi tahu. Lihat kapan menghubungi klinik di bawah.", zh: "这可能需要今天检查。已经通知诊所。请看下面何时联系诊所。" },
   famTalkCrisis: { en: "Caring for someone you love can be very heavy. You deserve support too. Please talk to someone you trust now, or call the line below.", id: "Merawat orang yang Anda sayangi bisa sangat berat. Anda juga layak didukung. Bicaralah dengan orang yang Anda percaya sekarang, atau hubungi nomor di bawah.", zh: "照顾所爱的人可能非常辛苦，您也值得被支持。请现在找一个信任的人聊聊，或拨打下面的电话。" },
   famTalkSaveQuestion: { en: "Save this question for the doctor: “{text}”", id: "Simpan pertanyaan ini untuk dokter: “{text}”", zh: "把这个问题留给医生：“{text}”" },
+  famTalkTasks: { en: "Things to do from what you said:", id: "Hal yang bisa dikerjakan dari cerita Anda:", zh: "根据您说的，可以做的事：" },
+  famTalkAddTask: { en: "Add to my tasks", id: "Tambah ke tugas", zh: "加入我的任务" },
+  famTalkTaskAdded: { en: "Added · see tasks", id: "Ditambahkan · lihat tugas", zh: "已添加 · 查看任务" },
   famTalkSaveIt: { en: "Save the question", id: "Simpan pertanyaan", zh: "保存问题" },
   famTalkQuestionSaved: { en: "Saved in Questions for the doctor.", id: "Tersimpan di Pertanyaan untuk dokter.", zh: "已保存到给医生的问题。" },
   // ---- Admin ----

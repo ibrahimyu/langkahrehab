@@ -13,8 +13,9 @@ const toast = useToast();
 const { view, me, send: familySend } = useFamily(props.patientId);
 
 type Action = "none" | "tasks" | "questions" | "members" | "help";
-type Bubble = { role: "user" | "model"; text: string; safeKey?: string | null; action?: Action; question?: string; questionSaved?: boolean; redFlag?: boolean };
-type Reply = { mode: "reply" | "crisis" | "red_flag"; reply: string; safeKey?: string | null; action: Action; question: string };
+type TaskIdea = { title: string; detail: string; item: boolean; added?: boolean };
+type Bubble = { role: "user" | "model"; text: string; safeKey?: string | null; action?: Action; question?: string; questionSaved?: boolean; redFlag?: boolean; tasks?: TaskIdea[] };
+type Reply = { mode: "reply" | "crisis" | "red_flag"; reply: string; safeKey?: string | null; action: Action; question: string; tasks?: TaskIdea[] };
 
 const bubbles = ref<Bubble[]>([]);
 const draft = ref("");
@@ -50,7 +51,7 @@ async function send(text = draft.value) {
   try {
     const r = await api<Reply>(`/api/patients/${props.patientId}/family/talk`, { method: "POST", body: { text, lang: lang.value, memberId: me.value?.id, history } });
     if (r.mode === "crisis") crisis.value = true;
-    else bubbles.value.push({ role: "model", text: r.reply, safeKey: r.safeKey ?? null, action: r.action, question: r.question || undefined, redFlag: r.mode === "red_flag" });
+    else bubbles.value.push({ role: "model", text: r.reply, safeKey: r.safeKey ?? null, action: r.action, question: r.question || undefined, redFlag: r.mode === "red_flag", tasks: r.tasks?.length ? r.tasks : undefined });
   } catch (e) {
     bubbles.value.pop();
     draft.value = text;
@@ -66,6 +67,14 @@ async function saveQuestion(b: Bubble) {
   if ((await familySend("/questions", "POST", { text: b.question, by: me.value?.id, via: "text" })) === true) {
     b.questionSaved = true;
     toast.show(T("famTalkQuestionSaved"), { tone: "good" });
+  }
+}
+
+async function addTask(x: TaskIdea) {
+  const r = await familySend("/tasks", "POST", { title: x.title, detail: x.detail, assigneeId: me.value?.id, category: x.item ? "equipment" : "admin" });
+  if (r === true) {
+    x.added = true;
+    toast.show(T("famTaskAdded"), { tone: "good" });
   }
 }
 
@@ -160,6 +169,14 @@ const STARTERS: TextKey[] = ["famTalkStarter1", "famTalkStarter2", "famTalkStart
             <button v-if="!b.questionSaved" class="primary" @click="saveQuestion(b)"><MessageCircleQuestion class="ic" aria-hidden="true" /> {{ T("famTalkSaveIt") }}</button>
             <p v-else class="good-text">{{ T("famTalkQuestionSaved") }}</p>
           </div>
+          <div v-if="b.tasks?.length" class="card propose">
+            <p class="hint">{{ T("famTalkTasks") }}</p>
+            <div v-for="(x, j) in b.tasks" :key="j" class="task-idea">
+              <span><b>{{ x.title }}</b><br v-if="x.detail" /><span v-if="x.detail" class="hint">{{ x.detail }}</span></span>
+              <button v-if="!x.added" class="primary small-btn" @click="addTask(x)"><ListChecks class="ic" aria-hidden="true" /> {{ T("famTalkAddTask") }}</button>
+              <NuxtLink v-else :to="`${base}/tasks`" class="link">{{ T("famTalkTaskAdded") }}</NuxtLink>
+            </div>
+          </div>
           <NuxtLink v-if="b.action && b.action !== 'none'" :to="base + places[b.action].to" class="card learn-card">
             <span class="learn-ic"><component :is="places[b.action].icon" class="ic" aria-hidden="true" /></span>
             <span class="learn-text"><b>{{ T(places[b.action].key) }}</b></span>
@@ -213,3 +230,7 @@ const STARTERS: TextKey[] = ["famTalkStarter1", "famTalkStarter2", "famTalkStart
 </template>
 
 <style scoped src="~/assets/css/talk.css"></style>
+<style scoped>
+.task-idea { display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 8px 0; border-top: 1px solid var(--line); }
+.task-idea:first-of-type { border-top: 0; }
+</style>
