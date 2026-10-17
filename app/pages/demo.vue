@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ArrowRight } from "lucide-vue-next";
 import { scenarioById, scenarios } from "#shared/scenarios";
 
 const T = useT();
@@ -14,7 +15,7 @@ const tryIt = scenarioById("try-yourself")!;
       <h1 class="hero-title">{{ T("tagline") }}</h1>
       <p class="lede">{{ T("lede") }}</p>
       <div class="actions">
-        <button class="primary" :disabled="!!busy" @click="start(main)">{{ T("heroCta") }} →</button>
+        <button class="primary" :disabled="!!busy" @click="start(main)">{{ T("heroCta") }} <ArrowRight class="ic" aria-hidden="true" /></button>
         <button class="link" :disabled="!!busy" @click="start(tryIt)">{{ T("heroAlt") }}</button>
       </div>
       <div class="built">
@@ -42,7 +43,7 @@ const tryIt = scenarioById("try-yourself")!;
     <button v-for="s in scenarios" :key="s.id" class="card scenario" :class="{ main: s.main }" :disabled="!!busy" @click="start(s)">
       <span v-if="s.main" class="tag sun">{{ T("startHere") }} · {{ T("minutes", { n: s.minutes }) }}</span>
       <span v-else class="tag">{{ T("minutes", { n: s.minutes }) }} · {{ s.camera ? T("cameraOn") : T("noCamera") }}</span>
-      <h3 style="font-size: 19px">{{ T(s.title) }}</h3>
+      <h3 class="scenario-title">{{ T(s.title) }}</h3>
       <p class="hint">{{ T(s.blurb) }}</p>
     </button>
   </section>

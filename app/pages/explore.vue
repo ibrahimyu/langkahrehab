@@ -1,17 +1,19 @@
 <script setup lang="ts">
 import { profileText, stories } from "#shared/i18n";
 import type { PatientSummary } from "#shared/model";
+import { accountById } from "#shared/accounts";
 
 // Free exploration: every case, as the patient or the care team.
 const api = useApi();
-const role = useRole();
 const lang = useLang();
 const T = useT();
 const { data, error } = useAsyncData("patients", () => api<{ patients: PatientSummary[] }>("/api/patients"), { server: false });
 
+// Opening a case signs in as that person (or as the physio), like the sign-in screen does.
+const { signIn } = useSession();
 function open(id: string, as: "patient" | "physio") {
-  role.value = as;
-  navigateTo(as === "patient" ? `/patient/${id}` : `/care/${id}`);
+  const a = accountById(as === "patient" ? id : "rina");
+  if (a) signIn(a, as === "patient" ? undefined : `/care/${id}`);
 }
 </script>
 

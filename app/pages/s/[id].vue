@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ArrowLeft, ArrowRight } from "lucide-vue-next";
 import { scenarioById, stepInstruction, stepLabel, scenarios } from "#shared/scenarios";
 
 // Guided scenario: the patient's phone, step by step. The physio dashboard appears when switched on.
@@ -50,7 +51,7 @@ const { start } = useScenarioStart();
   <div class="runner-head">
     <div class="bar">
       <div>
-        <NuxtLink to="/" class="link">← {{ T("allScenarios") }}</NuxtLink>
+        <NuxtLink to="/demo" class="link back"><ArrowLeft class="ic" aria-hidden="true" /> {{ T("allScenarios") }}</NuxtLink>
         <h1>{{ T(scenario.title) }}</h1>
       </div>
       <button class="toggle" :aria-pressed="dashboard" @click="dashboard = !dashboard">
@@ -77,11 +78,11 @@ const { start } = useScenarioStart();
         <PatientSession v-else-if="step === 'exercise'" :patient-id="scenario.patientId" :simulation="scenario.simulation" @saved="(sid) => next({ session: sid })" />
         <template v-else-if="step === 'summary'">
           <PatientSummary v-if="sessionId" :patient-id="scenario.patientId" :session-id="sessionId" />
-          <button v-else class="ghost" @click="goTo(scenario.steps.indexOf('exercise'))">← {{ T("step_exercise") }}</button>
+          <button v-else class="ghost" @click="goTo(scenario.steps.indexOf('exercise'))"><ArrowLeft class="ic" aria-hidden="true" /> {{ T("step_exercise") }}</button>
         </template>
         <PatientHome v-else-if="step === 'next_day' || step === 'visit' || step === 'checkup'" :patient-id="scenario.patientId" variant="home" @start="goTo(scenario.steps.indexOf('exercise') >= 0 ? scenario.steps.indexOf('exercise') : stepIndex)" />
         <PatientSkin v-else-if="step === 'skin'" :patient-id="scenario.patientId" />
-        <button v-if="!isLast && step !== 'meet' && step !== 'exercise'" class="primary big-btn pill-btn" @click="next()">{{ T("nextStep") }}</button>
+        <button v-if="!isLast && step !== 'meet' && step !== 'exercise'" class="primary big-btn pill-btn" @click="next()">{{ T("nextStep") }} <ArrowRight class="ic" aria-hidden="true" /></button>
         </div>
         </Transition>
       </div>
