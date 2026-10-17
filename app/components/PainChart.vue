@@ -27,8 +27,8 @@ const day = (iso: string) => new Date(iso).toLocaleDateString(locale(lang.value)
       <span class="pain-limit" :style="{ bottom: `${(limit / 10) * 100}%` }"><span>{{ T("painLimitN", { n: limit }) }}</span></span>
       <div v-for="s in shown" :key="s.id" class="pain-col">
         <div class="pain-pair">
-          <i class="before" :style="{ height: `${((s.before ?? 0) / 10) * 100}%` }"><b>{{ s.before ?? "" }}</b></i>
-          <i class="after" :class="{ high: s.after !== null && s.after >= limit }" :style="{ height: `${((s.after ?? 0) / 10) * 100}%` }"><b>{{ s.after ?? "" }}</b></i>
+          <i class="before" :class="{ low: (s.before ?? 0) < 2 }" :style="{ height: `${((s.before ?? 0) / 10) * 100}%` }"><b>{{ s.before ?? "" }}</b></i>
+          <i class="after" :class="{ high: s.after !== null && s.after >= limit, low: (s.after ?? 0) < 2 }" :style="{ height: `${((s.after ?? 0) / 10) * 100}%` }"><b>{{ s.after ?? "" }}</b></i>
         </div>
         <span class="pain-day"><b>{{ weekday(s.at) }}</b>{{ day(s.at) }}</span>
       </div>
@@ -44,13 +44,15 @@ const day = (iso: string) => new Date(iso).toLocaleDateString(locale(lang.value)
 .pain-say.trend-down { background: var(--pine-soft); }
 .pain-chart { position: relative; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 4px; height: 160px; padding-top: 8px; border-bottom: 1px solid var(--line); }
 .pain-limit { position: absolute; left: 0; right: 0; border-top: 2px dashed var(--danger-ink); pointer-events: none; }
-.pain-limit span { position: absolute; right: 0; top: -20px; font-size: 0.75rem; font-weight: 700; color: var(--danger-ink); background: var(--surface); padding: 0 4px; }
+.pain-limit span { position: absolute; left: 0; top: -20px; font-size: 0.75rem; font-weight: 700; color: var(--danger-ink); background: var(--surface); padding: 0 4px; }
 .pain-col { display: grid; grid-template-rows: 1fr auto; min-width: 0; }
 .pain-pair { display: flex; gap: 2px; align-items: flex-end; justify-content: center; height: 100%; }
-.pain-pair i, .pain-legend i { display: inline-block; width: 12px; border-radius: 3px 3px 0 0; }
+.pain-pair i, .pain-legend i { display: inline-block; width: 14px; border-radius: 3px 3px 0 0; }
 .pain-pair i { position: relative; min-height: 2px; }
-.pain-pair i b { position: absolute; left: 50%; bottom: 100%; transform: translateX(-50%); font-size: 0.6875rem; font-style: normal; line-height: 1.4; color: var(--ink-2); }
-.pain-pair .after b { color: var(--ink); }
+/* The value sits inside the top of its bar, so it never crosses the limit line. */
+.pain-pair i b { position: absolute; left: 50%; top: 1px; transform: translateX(-50%); font-size: 0.6875rem; font-style: normal; line-height: 1.4; color: var(--ink); }
+.pain-pair i.low b { top: auto; bottom: 100%; color: var(--ink-2); }
+.pain-pair .after:not(.low) b { color: var(--surface); }
 .pain-pair .before, .pain-legend .before { background: var(--line-strong); }
 .pain-pair .after, .pain-legend .after { background: var(--pine); }
 .pain-pair .after.high { background: var(--danger-ink); }
