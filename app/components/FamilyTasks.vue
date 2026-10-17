@@ -139,18 +139,48 @@ async function remove(t: FamilyTask) {
 
 // ---- Add a task ----
 const adding = ref(false);
-const draft = reactive({ title: "", detail: "", assigneeId: null as string | null, dueDate: "", item: false });
+const draft = reactive({ title: "", detail: "", assigneeId: null as string | null, dueDate: "", item: false, templateId: null as string | null, reminder: null as TaskReminder | null });
+
+// Ideas: approved suggestions this family does not have yet, and more from the AI on request.
+type Idea = { title: string; detail: string; item: boolean; templateId: string | null };
+const ideas = ref<Idea[]>([]);
+const ideasBy = ref<"ai" | "template">("template");
+const loadingIdeas = ref(false);
+const api = useApi("family");
+async function loadIdeas(ai = false) {
+  loadingIdeas.value = true;
+  try {
+    const r = await api<{ ideas: Idea[]; by: "ai" | "template" }>(`/api/patients/${props.patientId}/family/tasks/ideas`, { method: "POST", body: { ai, lang: lang.value, memberId: me.value?.id } });
+    ideas.value = r.ideas;
+    ideasBy.value = r.by;
+  } catch (e) {
+    toast.show(errorMessage(e), { tone: "bad" });
+  } finally {
+    loadingIdeas.value = false;
+  }
+}
+const defaultTime = "08:00";
+function useIdea(x: Idea) {
+  Object.assign(draft, { title: x.title, detail: x.detail, item: x.item, templateId: x.templateId });
+}
 const addError = ref("");
 function startAdd() {
-  Object.assign(draft, { title: "", detail: "", assigneeId: me.value?.id ?? null, dueDate: "", item: false });
+  Object.assign(draft, { title: "", detail: "", assigneeId: me.value?.id ?? null, dueDate: "", item: false, templateId: null, reminder: null });
   addError.value = "";
   adding.value = true;
+  void loadIdeas();
 }
 async function addTask() {
   addError.value = "";
   if (loadsBody(`${draft.title} ${draft.detail}`)) return (addError.value = T("famBodyTaskNo"));
   saving.value = true;
-  const r = await send("/tasks", "POST", { title: draft.title, detail: draft.detail, assigneeId: draft.assigneeId, dueDate: draft.dueDate || null, category: draft.item ? "equipment" : "admin" }, { quiet: true });
+  const common = { assigneeId: draft.assigneeId, dueDate: draft.dueDate || null, reminder: draft.reminder };
+  // An unchanged approved suggestion is added as itself (all three languages); anything else as written.
+  const tpl = draft.templateId ? ideas.value.find((x) => x.templateId === draft.templateId) : undefined;
+  const body = tpl && tpl.title === draft.title && tpl.detail === draft.detail
+    ? { ...common, templateId: draft.templateId }
+    : { ...common, title: draft.title, detail: draft.detail, category: draft.item ? "equipment" : "admin" };
+  const r = await send("/tasks", "POST", body, { quiet: true });
   saving.value = false;
   if (r === true) {
     adding.value = false;
@@ -292,15 +322,35 @@ async function addTask() {
     <!-- Add a task -->
     <UiSheet :open="adding" :title="T('famAddTask')" @close="adding = false">
       <form class="stack" @submit.prevent="addTask">
+        <section class="ideas">
+          <div class="ideas-head">
+            <b><Sparkles class="ic" aria-hidden="true" /> {{ T("famIdeas") }}</b>
+            <button type="button" class="ghost small-btn" :disabled="loadingIdeas" @click="loadIdeas(true)">{{ loadingIdeas ? T("navFinding") : T("famIdeasAi") }}</button>
+          </div>
+          <p v-if="!ideas.length && !loadingIdeas" class="hint">{{ T("famIdeasNone") }}</p>
+          <div class="idea-list">
+            <button v-for="(x, i) in ideas" :key="i" type="button" class="idea" :class="{ on: draft.title === x.title }" @click="useIdea(x)">
+              <b>{{ x.title }}</b><span class="hint">{{ x.detail }}</span>
+            </button>
+          </div>
+          <p v-if="ideasBy === 'ai'" class="hint">{{ T("famIdeasByAi") }}</p>
+        </section>
         <label class="field"><span>{{ T("famTaskTitle") }}</span><input v-model="draft.title" maxlength="120" required /></label>
         <label class="field"><span>{{ T("famTaskDetail") }}</span><textarea v-model="draft.detail" rows="2" maxlength="400" /></label>
-        <label class="check inline"><input v-model="draft.item" type="checkbox" /> {{ T("famNeedsItem") }}</label>
+        <label class="item-toggle"><input v-model="draft.item" type="checkbox" /> {{ T("famNeedsItem") }}</label>
         <div class="field"><span>{{ T("famAssignTo") }}</span>
           <div class="chip-row">
             <button v-for="m in v.family" :key="m.id" type="button" class="choice" :class="{ on: draft.assigneeId === m.id }" :aria-pressed="draft.assigneeId === m.id" @click="draft.assigneeId = m.id">{{ m.id === me?.id ? T("famYou") : m.name }}</button>
           </div>
         </div>
         <label class="field"><span>{{ T("famDueDate") }}</span><input v-model="draft.dueDate" type="date" /></label>
+        <div class="field"><span>{{ T("remTitle") }}</span>
+          <div class="chip-row">
+            <button type="button" class="choice" :class="{ on: !draft.reminder }" @click="draft.reminder = null">{{ T("remOff") }}</button>
+            <button v-for="e in REMIND_EVERY" :key="e" type="button" class="choice" :class="{ on: draft.reminder?.every === e }" @click="draft.reminder = { every: e, time: draft.reminder?.time ?? defaultTime }">{{ T(`remEvery_${e}` as TextKey) }}</button>
+          </div>
+          <input v-if="draft.reminder" v-model="draft.reminder.time" type="time" :aria-label="T('remTime')" />
+        </div>
         <p v-if="addError" class="error">{{ addError }}</p>
         <button class="primary big-btn" :disabled="saving || !draft.title.trim()"><Plus class="ic" aria-hidden="true" /> {{ T("famAddTask") }}</button>
       </form>
@@ -326,6 +376,15 @@ async function addTask() {
 .task-title { font-weight: 600; font-size: 1.0625rem; }
 .task.done .task-title { color: var(--ink-3); text-decoration: line-through; }
 .task-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.item-toggle { display: flex; gap: 10px; align-items: center; min-height: 44px; font-weight: 600; }
+.item-toggle input { width: 22px; height: 22px; accent-color: var(--pine); }
+.ideas { display: grid; gap: 8px; padding: 12px; border-radius: var(--r-card); background: var(--pine-soft); }
+.ideas-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.ideas-head b { display: flex; gap: 6px; align-items: center; }
+.idea-list { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; margin: 0 -4px; padding: 0 4px 2px; }
+.idea { flex: none; width: 220px; display: grid; gap: 4px; align-content: start; text-align: left; padding: 10px 12px; border-radius: 12px; border: 1px solid transparent; background: var(--surface); color: var(--ink); cursor: pointer; }
+.idea.on { border-color: var(--pine); }
+.idea .hint { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .nav-box { display: grid; gap: 10px; padding: 14px; border-radius: var(--r-card); background: var(--sunken); }
 .nav-box h3 { display: flex; gap: 8px; align-items: center; font-size: 1.0625rem; }
 .nav-find { display: grid; gap: 8px; }
