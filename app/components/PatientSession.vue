@@ -719,4 +719,41 @@ const DIFFS: Difficulty[] = ["easy", "ok", "hard"];
 .diff-row.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .helper-tip { margin: 0; max-width: 360px; padding: 10px 12px; border-radius: 12px; background: var(--night-raised); color: var(--on-night); font-size: 0.9375rem; text-align: left; }
 .voice-grid .on { background: var(--ink); color: var(--surface); }
+
+/* DES-06: ink stage, pine-light accent, a rep number that reads from across the room. */
+.patient-view .immersive .hud-count { background: var(--pine-light); color: var(--ink); }
+.patient-view .immersive .hud-count b { font-size: clamp(88px, 28vw, 140px); }
+.patient-view .immersive .set-bars span.done { background: var(--pine-light); }
+.patient-view .demo-reopen { min-height: 44px; }
+/* Text drawn on the camera keeps 7:1: a nearly solid backing behind it. */
+.imm-cam :deep(.camera-hint), .imm-cam :deep(.camera-legend) { background: color-mix(in srgb, var(--night) 94%, transparent); }
+
+/* Phone on its side: the whole screen is the session. Camera (or the guide video) on the left,
+   the count, the questions and the buttons on the right. Nothing is drawn over the camera. */
+@media (orientation: landscape) and (max-height: 520px) {
+  .patient-view .immersive {
+    position: fixed; inset: 0; z-index: 70; margin: 0; border-radius: 0;
+    height: 100dvh; min-height: 0; overflow: hidden;
+    grid-template-columns: minmax(0, 1.15fr) minmax(300px, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
+    grid-template-areas: "top hud" "cam hud" "cam cap" "cam foot";
+    gap: 8px 14px;
+    padding: 8px max(12px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  }
+  .patient-view .immersive:has(.demo-pane) {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(280px, 0.95fr);
+    grid-template-areas: "top top hud" "demo cam hud" "demo cam cap" "demo cam foot";
+  }
+  .imm-split, .imm-stage { display: contents; }
+  .imm-top { grid-area: top; }
+  .demo-pane { grid-area: demo; aspect-ratio: auto; min-height: 0; }
+  .imm-cam { grid-area: cam; min-height: 0; display: grid; }
+  .imm-cam :deep(.tracker), .imm-cam :deep(.camera), .imm-cam :deep(.media) { width: 100%; height: 100%; max-height: none; aspect-ratio: auto !important; }
+  .imm-hud { grid-area: hud; overflow-y: auto; align-content: start; }
+  .imm-caption { grid-area: cap; min-height: 0; }
+  .immersive > div:last-child { grid-area: foot; display: grid; gap: 8px; }
+  .immersive > div:last-child .imm-controls { padding-bottom: 0; }
+  .patient-view .immersive .hud-count b { font-size: clamp(88px, 22dvh, 140px); }
+  .imm-q { font-size: 1.125rem; }
+}
 </style>
