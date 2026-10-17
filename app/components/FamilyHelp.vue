@@ -2,7 +2,7 @@
 import { ArrowLeft, Droplet, Droplets, Footprints, HeartCrack, PersonStanding, PhoneCall, Siren, Thermometer, Zap } from "lucide-vue-next";
 import type { Component } from "vue";
 import type { TextKey } from "#shared/i18n";
-import { CRISIS_LINE, DEMO_CLINIC_PHONE } from "#shared/family";
+import { CRISIS_LINE, CLINIC_PHONE } from "#shared/family";
 
 // When to contact the clinic (KEL-06): a fixed list from the clinical rules, never AI, always one tap
 // away in the family app. Clinic number is made up for the demo and labelled so.
@@ -31,7 +31,7 @@ const tel = (n: string) => `tel:${n.replace(/[^\d+]/g, "")}`;
       </ul>
     </article>
     <div class="stack">
-      <a class="primary big-btn" :href="tel(DEMO_CLINIC_PHONE)"><PhoneCall class="ic" aria-hidden="true" /> {{ T("famCallClinic") }} <span class="pill demo-pill">{{ T("famDemo") }}</span></a>
+      <a class="primary big-btn" :href="tel(CLINIC_PHONE)"><PhoneCall class="ic" aria-hidden="true" /> {{ T("famCallClinic") }}</a>
       <a class="ghost big-btn" :href="tel(CRISIS_LINE)"><PhoneCall class="ic" aria-hidden="true" /> {{ T("famCrisisLine", { n: CRISIS_LINE }) }}</a>
       <a class="danger-btn big-btn" href="tel:112"><Siren class="ic" aria-hidden="true" /> {{ T("famEmergency") }}</a>
     </div>

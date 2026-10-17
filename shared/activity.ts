@@ -21,7 +21,7 @@ export function logActivity(
 
 /**
  * The feed, newest first. Events written before the feed existed (seed data, older copies) are
- * derived from the record so a new demo copy does not start empty; ids already logged are skipped.
+ * derived from the record so a new copy does not start empty; ids already logged are skipped.
  */
 export function feedFor(p: Patient): ActivityEvent[] {
   const logged = new Set((p.activity ?? []).map((e) => e.refs[0]?.id).filter(Boolean));

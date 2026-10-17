@@ -26,7 +26,7 @@ import {
 /** Crisis line shown with 112 (KEL-06, SYS-01). TODO: verify number before production. */
 export const CRISIS_LINE = "119";
 /** Made-up clinic number, labelled "Demo" on screen. */
-export const DEMO_CLINIC_PHONE = "+62 21 5550 0199";
+export const CLINIC_PHONE = "+62 21 5550 0199";
 
 /** Pain as a word for the family (KEL-02): 0 none · 1–3 mild · 4–6 moderate · 7–10 strong. */
 export type PainWord = "none" | "mild" | "moderate" | "strong";

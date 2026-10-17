@@ -50,7 +50,7 @@ async function limited<T>(jobs: (() => Promise<T>)[], n: number) {
 }
 
 /**
- * SYS-03: the daily navigator cycle, idempotent per demo date (Workspace.lastDailyCycle).
+ * SYS-03: the daily navigator cycle, idempotent per date (Workspace.lastDailyCycle).
  * Per patient: missed/review (daily), mood (SYS-07), progression (FIS-06), then one summary event in the
  * feed. AI reasons are written after the rules, three at a time, and the template stays if the AI fails.
  */

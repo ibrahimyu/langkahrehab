@@ -15,13 +15,12 @@ const api = useApi(() => props.role);
 const T = useT();
 const lang = useLang();
 const toast = useToast();
-const { now } = useDemoClock();
 const canDecide = computed(() => can(props.role, "proposal.decide"));
 
 const pending = computed(() => props.patient.proposals.find((x) => x.status === "pending") ?? null);
 const earlier = computed(() => props.patient.proposals.filter((x) => x.status !== "pending").slice(-4).reverse());
 // Live check from the same rules the server runs, so the physio sees why there is no proposal yet.
-const check = computed(() => evaluateProgression(props.patient, now.value ?? Date.now()));
+const check = computed(() => evaluateProgression(props.patient, Date.now()));
 const passed = computed(() => check.value.eligibility.filter((e) => e.passed).length);
 
 const name = (id: string) => exerciseById(id)?.name[lang.value] ?? id;

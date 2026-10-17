@@ -1,4 +1,4 @@
-import { accountById, homeFor, type DemoAccount } from "#shared/accounts";
+import { accountById, homeFor, type Account } from "#shared/accounts";
 import { ROLES, type Role } from "#shared/model";
 
 const SESSION_KEY = "langkah-session";
@@ -12,14 +12,14 @@ function readSaved(): string | null {
 }
 
 /**
- * The signed-in demo account (sign-in screen at "/"). The app is a client-only SPA, so the saved
+ * The signed-in account (sign-in screen at "/signin"). The app is a client-only SPA, so the saved
  * account is read once at start-up, before route middleware runs.
  */
 export function useSession() {
   const accountId = useState<string | null>("session-account", () => readSaved());
-  const account = computed<DemoAccount | null>(() => (accountId.value ? accountById(accountId.value) ?? null : null));
+  const account = computed<Account | null>(() => (accountId.value ? accountById(accountId.value) ?? null : null));
 
-  function signIn(a: DemoAccount, to?: string) {
+  function signIn(a: Account, to?: string) {
     accountId.value = a.id;
     useState<Role>("role").value = a.role;
     try {
@@ -33,7 +33,7 @@ export function useSession() {
     try {
       localStorage.removeItem(SESSION_KEY);
     } catch {}
-    return navigateTo("/");
+    return navigateTo("/signin");
   }
 
   return { account, signIn, signOut };
@@ -46,11 +46,4 @@ export function useRole() {
     return a && (ROLES as readonly string[]).includes(a.role) ? a.role : "patient";
   });
   return role;
-}
-
-/** The demo clock, shared by the header and pages. */
-export function useDemoClock() {
-  const now = useState<number | null>("demo-now", () => null);
-  const day = useState<number>("demo-day", () => 0);
-  return { now, day };
 }

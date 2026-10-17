@@ -73,7 +73,7 @@ export function afterSession(p: Patient, s: SessionRecord, now: number): { nextA
   return { nextAction: next, alerts };
 }
 
-/** Daily checks, run when the demo clock moves to the next day. */
+/** Daily checks, run once per day by the navigator cycle. */
 export function daily(p: Patient, now: number): Alert[] {
   const at = new Date(now).toISOString();
   const alerts: Alert[] = [];

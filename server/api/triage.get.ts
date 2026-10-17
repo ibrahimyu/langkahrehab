@@ -2,7 +2,7 @@ import { pickLang, summarize, type CareRole, type TriageAction, type TriageCache
 import { careSignals, triage, type TriageReason } from "#shared/triage";
 
 // AI-06 morning triage: one short sentence per patient on the care home. The rules (shared/triage.ts)
-// decide who is listed and in which tier; the AI only words the reason. Cached per role per demo date
+// decide who is listed and in which tier; the AI only words the reason. Cached per role per date
 // and language in the workspace; without the AI the screen keeps its template reasons (by: "template").
 const raw = (r: TriageReason): string =>
   r.kind === "alert" ? `${r.severity} alert: ${r.alert.replace("_", " ")}`
