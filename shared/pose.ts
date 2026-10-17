@@ -7,11 +7,12 @@ export type Landmark = { x: number; y: number; z?: number; visibility?: number }
 export type Side = "left" | "right";
 /** "none" is for testers without an amputation: `side` is then the leg that does the exercise. */
 export type Level = "none" | "below_knee" | "above_knee";
-export type Limb = { level: Level; side: Side };
+/** `arm`: the amputated arm, when there is one; arm exercises are measured on that side. */
+export type Limb = { level: Level; side: Side; arm?: { side: Side; elbowLost: boolean } };
 
 const IDX = {
-  left: { shoulder: 11, hip: 23, knee: 25, ankle: 27 },
-  right: { shoulder: 12, hip: 24, knee: 26, ankle: 28 },
+  left: { shoulder: 11, elbow: 13, wrist: 15, hip: 23, knee: 25, ankle: 27 },
+  right: { shoulder: 12, elbow: 14, wrist: 16, hip: 24, knee: 26, ankle: 28 },
 } as const;
 type Joint = keyof (typeof IDX)["left"];
 
@@ -52,6 +53,7 @@ export function elevation(from: Landmark, to: Landmark) {
 }
 
 const NO_KNEE = "Above-knee amputation: there is no knee point on that side, so this movement cannot be measured in this test.";
+const NO_ELBOW = "Amputation at or above the elbow: there is no elbow point on that side, so this movement cannot be measured.";
 
 export function tracking(exerciseId: string, limb: Limb): Tracking | null {
   const amp = limb.side;
@@ -104,6 +106,34 @@ export function tracking(exerciseId: string, limb: Limb): Tracking | null {
         uses: [[good, "hip"], [good, "knee"], [good, "ankle"]],
         compute: (lm) => angle(pt(lm, good, "hip"), pt(lm, good, "knee"), pt(lm, good, "ankle")),
       };
+    case "arm-raise-forward": {
+      // The arm lifts forward: the hip–shoulder–elbow angle opens.
+      const arm = limb.arm?.side ?? limb.side;
+      return {
+        label: "Shoulder angle (hip–shoulder–elbow)",
+        up: 70,
+        down: 35,
+        range: [0, 180],
+        camera: "Side view at chest height, about 2 m away, the exercising arm towards the camera.",
+        unsupported: limb.arm?.elbowLost ? NO_ELBOW : undefined,
+        uses: [[arm, "hip"], [arm, "shoulder"], [arm, "elbow"]],
+        compute: (lm) => angle(pt(lm, arm, "hip"), pt(lm, arm, "shoulder"), pt(lm, arm, "elbow")),
+      };
+    }
+    case "elbow-bend": {
+      // The elbow bends: 180° minus the shoulder–elbow–wrist angle grows.
+      const arm = limb.arm?.side ?? limb.side;
+      return {
+        label: "Elbow bend (degrees from straight)",
+        up: 60,
+        down: 25,
+        range: [0, 160],
+        camera: "Front or side view at chest height, about 1.5 m away, the whole arm in frame.",
+        unsupported: limb.arm?.elbowLost ? NO_ELBOW : undefined,
+        uses: [[arm, "shoulder"], [arm, "elbow"], [arm, "wrist"]],
+        compute: (lm) => 180 - angle(pt(lm, arm, "shoulder"), pt(lm, arm, "elbow"), pt(lm, arm, "wrist")),
+      };
+    }
   }
   return null;
 }

@@ -84,7 +84,7 @@ export function usePoseTracker(els: {
     const H = canvas.height;
     const used = new Set((tracking?.uses ?? []).map(([side, joint]) => `${side}:${joint}`));
     const usedIdx = new Set<number>();
-    const idx = { left: { shoulder: 11, hip: 23, knee: 25, ankle: 27 }, right: { shoulder: 12, hip: 24, knee: 26, ankle: 28 } };
+    const idx = { left: { shoulder: 11, elbow: 13, wrist: 15, hip: 23, knee: 25, ankle: 27 }, right: { shoulder: 12, elbow: 14, wrist: 16, hip: 24, knee: 26, ankle: 28 } };
     for (const side of ["left", "right"] as const)
       for (const [joint, i] of Object.entries(idx[side])) if (used.has(`${side}:${joint}`)) usedIdx.add(i);
 

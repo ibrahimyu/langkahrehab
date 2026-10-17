@@ -5,7 +5,7 @@
 
 import { LANGS, type Lang } from "./exercises";
 import type { Level, Limb as PoseLimb, Side } from "./pose";
-import { legacyFields, limbEnglish, limbsOf, sanitizeLimbs, type Limb } from "./limbs";
+import { elbowLost, legacyFields, limbEnglish, limbsOf, sanitizeLimbs, type Limb } from "./limbs";
 
 export const ROLES = ["patient", "family", "physio", "doctor"] as const;
 export type Role = (typeof ROLES)[number];
@@ -402,7 +402,10 @@ export const DAY = 86_400_000;
 /** The clock for a workspace: real time plus any offset kept from older data. */
 export const nowFor = (w: Workspace | null) => Date.now() + (w?.offsetDays ?? 0) * DAY;
 
-export const limbOf = (p: Profile): PoseLimb => ({ level: p.level, side: p.side });
+export const limbOf = (p: Profile): PoseLimb => {
+  const arm = limbsOf(p).find((l) => l.site === "upper");
+  return { level: p.level, side: p.side, ...(arm ? { arm: { side: arm.side, elbowLost: elbowLost(arm) } } : {}) };
+};
 
 /** One plain-English description of the patient for prompts and screens. */
 export function describeProfile(p: Profile) {
