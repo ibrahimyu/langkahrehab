@@ -3,8 +3,11 @@
 
 import type { Lang } from "./exercises";
 import { limbLine, limbsOf, type Limb } from "./limbs";
+import { patientText } from "./text/patient";
+import { rolesText } from "./text/roles";
+import { platformText } from "./text/platform";
 
-const text = {
+const base = {
   // ---- App bar ----
   more: { en: "More", id: "Lainnya", zh: "更多" },
   close: { en: "Close", id: "Tutup", zh: "关闭" },
@@ -1239,6 +1242,9 @@ export function t(lang: Lang, key: TextKey, params: Record<string, string | numb
 }
 
 /** "today", "yesterday" or "3 days ago". */
+// Each area keeps its own text file so parallel work does not collide.
+const text = { ...base, ...patientText, ...rolesText, ...platformText };
+
 export function ago(lang: Lang, days: number) {
   return days <= 0 ? t(lang, "todayWord") : days === 1 ? t(lang, "yesterday") : t(lang, "daysAgo", { n: days });
 }
