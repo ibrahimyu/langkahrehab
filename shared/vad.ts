@@ -14,7 +14,8 @@ export class EnergyVad {
   constructor(
     public threshold: number,
     public hangoverMs: number,
-    private startChunks = 2,
+    /** Chunks above the threshold in a row before it counts as speech (raised while the coach talks). */
+    public startChunks = 2,
   ) {}
 
   push(rms: number, now: number): VadEvent {

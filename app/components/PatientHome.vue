@@ -1,15 +1,21 @@
 <script setup lang="ts">
+import { FileText, Sparkles, Target, ChevronRight, HeartHandshake, Footprints, Play, Square, Volume2, Flame, TrendingUp, Route, BookOpen, MessageCircleQuestion } from "lucide-vue-next";
 import { exerciseById } from "#shared/exercises";
+import { limbLine, limbsOf } from "#shared/limbs";
 import { ago, locale, profileText, stories, type TextKey } from "#shared/i18n";
 import { DAY, type Patient } from "#shared/model";
-import { daysSinceSession, weekAdherence } from "#shared/rules";
+import { daysSinceSession, reviewDay, weekAdherence } from "#shared/rules";
+import { nextTarget } from "#shared/goals";
+import { planMinutes, repsSinceLastWeek, streakDays } from "#shared/home";
+import { dayKey } from "#shared/calendar";
+import { computeJourneyStage } from "#shared/journey";
 
 // The patient's home screen. "meet" introduces the patient (photo, X-ray, goal) for a scenario;
 // "home" is the everyday screen with progress, check-ups and the skin check.
 const props = defineProps<{ patientId: string; variant: "meet" | "home" }>();
 const emit = defineEmits<{ start: []; skin: [] }>();
 
-const api = useApi();
+const api = useApi("patient");
 const lang = useLang();
 const T = useT();
 const version = useDataVersion();
@@ -33,6 +39,11 @@ const advice = computed(() => {
   const s = last.value;
   // Advice is for the day of the session; after that the plan (or a check-up) takes over.
   if (!s || s.nextAction.kind === "keep_going" || now.value - Date.parse(s.at) > DAY) return null;
+  // A check-up booked for a later day is shown with its date, not as "time for your check-up".
+  if (s.nextAction.kind === "review_due") {
+    const day = reviewDay(p.value!);
+    if (day > dayKey(now.value)) return { text: T("next_review_on", { date: fmt(day, { weekday: "long", day: "numeric", month: "long" }) }), danger: false };
+  }
   return { text: T(`next_${s.nextAction.kind}` as TextKey), danger: s.nextAction.kind === "stop_contact" || s.nextAction.kind === "rest_contact" };
 });
 const sinceLast = computed(() => (p.value ? daysSinceSession(p.value, now.value) : null));
@@ -40,14 +51,63 @@ const newPlan = computed(() => !!p.value && p.value.plan.version > 1 && now.valu
 const adherence = computed(() => (p.value ? weekAdherence(p.value, now.value) : null));
 const painSeries = computed(() => (p.value?.sessions ?? []).filter((s) => s.painAfter !== null).slice(-7));
 const fmt = (d: string | number, o: Intl.DateTimeFormatOptions) => new Date(d).toLocaleDateString(locale(lang.value), o);
-const sideWord = computed(() => (p.value ? T(p.value.profile.side) : ""));
-const profileLine = computed(() => {
-  const pr = p.value?.profile;
-  if (!pr || pr.level === "none") return "";
-  const level = pr.level === "below_knee" ? { en: "below the knee", id: "di bawah lutut", zh: "膝下" } : { en: "above the knee", id: "di atas lutut", zh: "膝上" };
-  const text = { en: `${sideWord.value} leg, ${level.en}`, id: `kaki ${sideWord.value}, ${level.id}`, zh: `${sideWord.value}腿${level.zh}` }[lang.value];
-  return text.charAt(0).toUpperCase() + text.slice(1);
+const limbs = computed(() => (p.value ? limbsOf(p.value.profile) : []));
+const profileLine = computed(() => limbs.value.map((l) => limbLine(lang.value, l)).join(" + "));
+
+// SYS-05: a session that could not be saved is kept on this phone until it goes through.
+const pending = usePendingSession(props.patientId);
+const sending = ref(false);
+async function sendPending() {
+  sending.value = true;
+  try {
+    await pending.send();
+    version.value++;
+  } catch (e) {
+    error.value = errorMessage(e);
+  } finally {
+    sending.value = false;
+  }
+}
+
+// Every card opens its detail (a page in the patient app, or a sheet). In a guided scenario the
+// cards stay inside the scenario, so page links are only used in the patient app.
+const route = useRoute();
+const inApp = computed(() => route.path.startsWith("/patient/"));
+const base = computed(() => `/patient/${props.patientId}`);
+const sheet = ref<"plan" | "pain" | null>(null);
+const roleKey = { patient: "rolePatient", physio: "rolePhysio", doctor: "roleDoctor", family: "roleFamily", admin: "roleAdmin" } as const;
+const mainGoal = computed(() => p.value?.goals.find((g) => g.main)?.text ?? goal.value);
+const painList = computed(() => [...(p.value?.sessions ?? [])].reverse().slice(0, 14));
+// The pain sheet: before/after per session (oldest first), the doctor's limit, and what the trend means.
+const painPoints = computed(() => [...painList.value].reverse().map((s) => ({ id: s.id, at: s.at, before: s.painBefore, after: s.painAfter })));
+
+// ---- Now card, next step, other foot, and true moments of progress (PAS-01) ----
+const scheduleText = useScheduleText();
+const minutes = computed(() => (p.value ? planMinutes(p.value.plan.items) : 0));
+const exerciseNames = computed(() => (p.value?.plan.items ?? []).map((i) => exerciseById(i.exerciseId)?.name[lang.value]).filter(Boolean).join(", "));
+const next = computed(() => (p.value ? nextTarget(p.value.goals) : null));
+const otherFoot = computed(() => {
+  const q = p.value;
+  if (!q || !["diabetes", "vascular"].includes(q.profile.cause) || q.profile.level === "none") return false;
+  return !q.skinChecks.some((c) => c.area === "other_foot" && dayKey(Date.parse(c.at)) === dayKey(now.value));
 });
+const moment = computed(() => {
+  const q = p.value;
+  const s = q?.sessions.at(-1);
+  if (!q || !s || dayKey(Date.parse(s.at)) !== dayKey(now.value)) return null;
+  const streak = streakDays(q.sessions, now.value);
+  if (streak >= 2) return { icon: Flame, text: T("streakN", { n: streak }) };
+  const gain = repsSinceLastWeek(q.sessions);
+  return gain && gain > 0 ? { icon: TrendingUp, text: T("repsGain", { n: gain }) } : null;
+});
+// Journey, questions and learning (PAS-03, PAS-05, PAS-16): one small list, each row opens its page.
+const journeyStep = computed(() => (p.value ? computeJourneyStage(p.value) : 1));
+const questionsWaiting = computed(() => (p.value?.notes ?? []).filter((n) => n.kind === "question" && !n.answeredAt && !n.reply).length);
+const reader = useReadAloud();
+const readNow = () => {
+  const q = p.value!;
+  reader.toggle([`${T("today")}: ${exerciseNames.value}. ${T("nowAbout", { n: minutes.value })}, ${scheduleText(q.plan)}.`, q.plan.note ? `${T("note")}: ${q.plan.note}` : "", `${T("checkup")}: ${fmt(`${q.plan.reviewDate}T09:00:00`, { weekday: "long", day: "numeric", month: "long" })}.`].filter(Boolean).join(" "));
+};
 
 const asking = ref(false);
 const reason = ref("");
@@ -61,70 +121,85 @@ async function askCheckup() {
 
 <template>
   <p v-if="error" class="error">{{ error }}</p>
+  <div v-if="pending.pendingCount.value" class="banner pending-banner" role="status">
+    <span>{{ T("pendingSession") }}</span>
+    <button class="primary small-btn" :disabled="sending" @click="sendPending">{{ sending ? T("saving") : T("sendNow") }}</button>
+  </div>
   <div v-if="p" class="patient-view">
     <div class="greet">
-      <MediaFrame class="avatar" :src="`/media/patients/${p.id}.jpg`" :label="p.name" icon="◯" />
+      <MediaFrame class="avatar" :src="`/media/patients/${p.id}.jpg`" :label="p.name" icon="person" />
       <div>
         <h1>{{ T("hello", { name: p.name }) }}</h1>
         <p class="hint">{{ fmt(now, { weekday: "long", day: "numeric", month: "long" }) }}</p>
+        <span v-if="moment" class="pill moment"><component :is="moment.icon" class="ic" aria-hidden="true" /> {{ moment.text }}</span>
       </div>
     </div>
 
     <div class="bento">
+      <InstallHint v-if="variant === 'home'" :sessions="p.sessions.length" />
+
+      <!-- Now: today's plan, how long it takes, and Start (PAS-01). Tap the card for the detail. -->
+      <div class="tile wide now-card tap">
+        <button class="tap-cover" :aria-label="T('today')" @click="sheet = 'plan'" />
+        <div class="now-top">
+          <span class="tile-label tap-label">{{ T("today") }} <ChevronRight class="ic" aria-hidden="true" /></span>
+          <button v-if="reader.supported.value" class="ghost small-btn" :aria-pressed="reader.speaking.value" @click="readNow">
+            <component :is="reader.speaking.value ? Square : Volume2" class="ic" aria-hidden="true" /> {{ reader.speaking.value ? T("stopReading") : T("readAloud") }}
+          </button>
+        </div>
+        <b class="now-title">{{ exerciseNames }}</b>
+        <span class="hint">{{ T("nowAbout", { n: minutes }) }} · {{ scheduleText(p.plan) }}<template v-if="p.plan.note"> · “{{ p.plan.note }}”</template></span>
+        <button class="primary big-btn now-start" @click="emit('start')"><Play class="ic" aria-hidden="true" /> {{ T("start") }}</button>
+      </div>
+
       <!-- Advice, nudge or new plan comes first: it's what the patient needs to act on. -->
       <div v-if="advice" class="tile wide" :class="advice.danger ? 'danger' : 'sun'"><b>{{ advice.text }}</b></div>
-      <div v-else-if="sinceLast !== null && sinceLast >= 2" class="tile wide sun"><b>{{ T("missedNudge", { n: sinceLast }) }}</b></div>
-      <div v-if="newPlan && variant === 'home'" class="tile wide sky">
-        <span class="tile-label">✦ {{ T("newPlan") }}</span>
+      <div v-else-if="sinceLast !== null && sinceLast >= 2" class="tile wide sun"><b>{{ T("missedNudge", { name: p.name.split(" ").slice(0, 2).join(" ") }) }}</b></div>
+      <div v-if="newPlan && variant === 'home'" class="tile wide sky tap">
+        <button class="tap-cover" :aria-label="T('newPlan')" @click="sheet = 'plan'" />
+        <span class="tile-label"><Sparkles class="ic" aria-hidden="true" /> {{ T("newPlan") }}</span>
         <p v-if="p.plan.note">“{{ p.plan.note }}”</p>
       </div>
 
       <template v-if="variant === 'meet'">
         <div class="tile wide"><p>{{ stories[p.id]?.[lang] ?? p.story }}</p></div>
-        <MediaFrame v-if="p.profile.level !== 'none'" :src="`/media/xray/${p.id}.png`" :label="T('amputationLevel')" style="aspect-ratio: 3 / 4; border-radius: 22px">
+        <MediaFrame v-if="limbs.length" :src="`/media/xray/${p.id}.png`" :label="T('amputationLevel')" style="aspect-ratio: 3 / 4; border-radius: 22px">
           <template #fallback><LimbDiagram :profile="p.profile" :label="T('amputationLevel')" /></template>
         </MediaFrame>
-        <div class="tile" :class="{ wide: p.profile.level === 'none' }">
+        <div class="tile" :class="{ wide: !limbs.length }">
           <span class="tile-label">{{ T("amputationLevel") }}</span>
           <b>{{ profileLine || profileText(lang, p.profile) }}</b>
           <p v-if="p.profile.restrictions" class="hint">{{ p.profile.restrictions }}</p>
           <template v-if="goal">
             <span class="tile-label" style="margin-top: 6px">{{ T("goal") }}</span>
-            <p class="goal">★ {{ goal }}</p>
+            <p class="goal"><Target class="ic" aria-hidden="true" /> {{ goal }}</p>
           </template>
         </div>
       </template>
 
-      <div v-else class="tile wide navy">
+      <div v-else class="tile wide navy" :class="{ tap: inApp }">
+        <NuxtLink v-if="inApp" :to="`${base}/calendar`" class="tap-cover" :aria-label="T('tabCalendar')" />
         <div class="ring-row">
           <ProgressRing :value="adherence ?? 0" />
           <div>
-            <div class="tile-big" style="color: #fff">{{ adherence ?? 0 }}%</div>
-            <p style="color: #c9daea">{{ T("thisWeek") }}</p>
-            <p style="color: #c9daea; font-size: 13px">{{ T("last") }}: {{ sinceLast === null ? T("noSessions") : ago(lang, sinceLast) }}</p>
+            <div class="tile-big on-night">{{ adherence ?? 0 }}%</div>
+            <p class="on-night-2">{{ T("thisWeek") }}</p>
+            <p class="on-night-2 hint-night">{{ T("last") }}: {{ sinceLast === null ? T("noSessions") : ago(lang, sinceLast) }}</p>
           </div>
         </div>
       </div>
 
-      <div class="tile wide">
-        <span class="tile-label">{{ T("today") }}</span>
-        <ul class="exercise-list">
-          <li v-for="item in p.plan.items" :key="item.exerciseId">
-            <MediaFrame class="thumb" kind="video" :src="`/media/exercises/${item.exerciseId}.mp4`" :poster="`/media/exercises/${item.exerciseId}.jpg`" :label="T('video')" />
-            <b>{{ exerciseById(item.exerciseId)?.name[lang] }}</b>
-            <span class="dose">{{ T("setsReps", { sets: item.sets, reps: item.reps }) }}</span>
-          </li>
-        </ul>
-        <p v-if="p.plan.note && !(newPlan && variant === 'home')" class="hint">{{ T("note") }}: “{{ p.plan.note }}”</p>
-      </div>
 
       <template v-if="variant === 'home'">
-        <div v-if="goal" class="tile sun">
-          <span class="tile-label" style="color: var(--warn-ink)">{{ T("goal") }}</span>
-          <b>★ {{ goal }}</b>
+        <div v-if="mainGoal" class="tile sun" :class="{ tap: inApp }">
+          <NuxtLink v-if="inApp" :to="`${base}/goals`" class="tap-cover" :aria-label="T('goal')" />
+          <span class="tile-label tap-label" style="color: var(--warn-ink)">{{ next ? T("nextStep") : T("goal") }} <ChevronRight v-if="inApp" class="ic" aria-hidden="true" /></span>
+          <b class="with-ic"><Target class="ic" aria-hidden="true" /> {{ next ? next.target.text : mainGoal }}</b>
+          <span v-if="next" class="hint goal-of">{{ next.goal.text }}</span>
         </div>
-        <div class="tile sky" :class="{ wide: !goal }">
-          <span class="tile-label">{{ T("pain") }}</span>
+        <div class="tile sky" :class="{ wide: !mainGoal, tap: painList.length }">
+          <button v-if="painList.length" class="tap-cover" :aria-label="T('pain')" @click="sheet = 'pain'" />
+          <span class="tile-label tap-label">{{ T("pain") }} <ChevronRight v-if="painList.length" class="ic" aria-hidden="true" /></span>
           <div v-if="painSeries.length" class="bars" style="height: 56px">
             <div v-for="s in painSeries" :key="s.id" class="bar-col" :title="`${s.at.slice(0, 10)}: ${s.painAfter}/10`">
               <div class="bar-fill" :class="{ high: s.painAfter! >= p.plan.painThreshold }" :style="{ height: `${(s.painAfter! / 10) * 100}%` }" />
@@ -132,27 +207,97 @@ async function askCheckup() {
           </div>
           <p v-else class="hint">{{ T("noSessions") }}</p>
         </div>
-        <div class="tile">
-          <span class="tile-label">{{ T("checkup") }}</span>
+        <div class="tile" :class="{ tap: inApp }">
+          <NuxtLink v-if="inApp" :to="`${base}/calendar`" class="tap-cover" :aria-label="T('checkup')" />
+          <span class="tile-label tap-label">{{ T("checkup") }} <ChevronRight v-if="inApp" class="ic" aria-hidden="true" /></span>
           <b>{{ fmt(`${p.plan.reviewDate}T09:00:00`, { weekday: "short", day: "numeric", month: "short" }) }}</b>
-          <p v-if="openRequest" class="good-text" style="font-size: 13px">{{ T("requested") }}</p>
+          <p v-if="openRequest" class="good-text">{{ T("requested") }}</p>
           <template v-else-if="asking">
             <input v-model="reason" :placeholder="T('askReason')" />
             <button class="primary pill-btn" @click="askCheckup">{{ T("send") }}</button>
           </template>
           <button v-else class="ghost pill-btn" @click="asking = true">{{ T("askCheckup") }}</button>
         </div>
-        <div class="tile">
-          <span class="tile-label">{{ T("skin") }}</span>
-          <p class="hint" style="font-size: 13px">{{ T("skinHint") }}</p>
-          <button class="ghost pill-btn" @click="emit('skin')">{{ T("skin") }} →</button>
+        <div class="tile tap" :class="{ sun: otherFoot }">
+          <button class="tap-cover" :aria-label="otherFoot ? T('otherFootTitle') : T('skin')" @click="emit('skin')" />
+          <span class="tile-label tap-label" :style="otherFoot ? 'color: var(--warn-ink)' : ''"><Footprints v-if="otherFoot" class="ic" aria-hidden="true" /> {{ otherFoot ? T("otherFootTitle") : T("skin") }}</span>
+          <p class="hint">{{ otherFoot ? T("otherFootHint") : T("skinHint") }}</p>
+          <button class="ghost pill-btn" @click="emit('skin')">{{ T("skin") }} <ChevronRight class="ic" aria-hidden="true" /></button>
         </div>
+        <nav v-if="inApp" class="tile wide more-list" :aria-label="T('journeyTitle')">
+          <NuxtLink :to="`${base}/journey`" class="more-row"><Route class="ic" aria-hidden="true" /><b>{{ T("journeyRow", { n: journeyStep }) }}</b><ChevronRight class="ic chev" aria-hidden="true" /></NuxtLink>
+          <NuxtLink :to="`${base}/questions`" class="more-row"><MessageCircleQuestion class="ic" aria-hidden="true" /><span class="more-text"><b>{{ T("questionsTitle") }}</b><span v-if="questionsWaiting" class="hint">{{ T("questionsWaitingN", { n: questionsWaiting }) }}</span></span><ChevronRight class="ic chev" aria-hidden="true" /></NuxtLink>
+          <NuxtLink v-if="p.letterExplanation" :to="`${base}/letter`" class="more-row"><FileText class="ic" aria-hidden="true" /><b>{{ T("letRow") }}</b><ChevronRight class="ic chev" aria-hidden="true" /></NuxtLink>
+          <NuxtLink :to="`${base}/learn`" class="more-row"><BookOpen class="ic" aria-hidden="true" /><b>{{ T("learnTitle") }}</b><ChevronRight class="ic chev" aria-hidden="true" /></NuxtLink>
+        </nav>
+        <NuxtLink :to="`/patient/${p.id}/talk`" class="tile wide talk-tile">
+          <span class="tile-label"><HeartHandshake class="ic" aria-hidden="true" /> {{ T("homeTalk") }}</span>
+          <span class="hint">{{ T("homeTalkHint") }}</span>
+          <ChevronRight class="ic talk-chev" aria-hidden="true" />
+        </NuxtLink>
       </template>
     </div>
 
-    <div class="cta">
-      <button class="primary big-btn pill-btn" @click="emit('start')">{{ T("start") }}</button>
-      <p class="hint" style="text-align: center; margin-top: 6px">{{ T("startHint") }}</p>
-    </div>
   </div>
+  <UiSheet :open="sheet === 'plan'" :title="T('today')" @close="sheet = null">
+    <div v-if="p" class="stack">
+      <ul class="detail-list">
+        <li v-for="item in p.plan.items" :key="item.exerciseId">
+          <ExerciseVideoButton :exercise-id="item.exerciseId" :level="p.profile.level" />
+          <NuxtLink :to="`/patient/${patientId}/exercise/${item.exerciseId}`" class="detail-main"><b>{{ exerciseById(item.exerciseId)?.name[lang] }}</b><span class="hint">{{ T("setsReps", { sets: item.sets, reps: item.reps }) }} · {{ T("howToDo") }} →</span></NuxtLink>
+        </li>
+      </ul>
+      <p v-if="p.plan.note" class="note">“{{ p.plan.note }}”</p>
+      <p class="hint">{{ T("planMeta", { v: p.plan.version, date: fmt(p.plan.updatedAt, { day: "numeric", month: "short" }), who: T(roleKey[p.plan.updatedBy]) }) }}</p>
+      <button class="primary big-btn" @click="sheet = null; emit('start')">{{ T("start") }}</button>
+    </div>
+  </UiSheet>
+  <UiSheet :open="sheet === 'pain'" :title="T('pain')" @close="sheet = null">
+    <PainChart v-if="p" :points="painPoints" :limit="p.plan.painThreshold" />
+    <ul v-if="p" class="detail-list">
+      <li v-for="s in painList" :key="s.id">
+        <span class="detail-main">
+          <b>{{ fmt(s.at, { weekday: "short", day: "numeric", month: "short" }) }}</b>
+          <span class="hint">{{ T("pain") }}: {{ s.painBefore ?? "–" }} → <b :class="{ 'pain-high': s.painAfter !== null && s.painAfter >= p.plan.painThreshold }">{{ s.painAfter ?? "–" }}</b>/10</span>
+        </span>
+        <NuxtLink v-if="inApp" :to="`${base}/summary/${s.id}`" class="link">{{ T("open") }}</NuxtLink>
+      </li>
+    </ul>
+  </UiSheet>
 </template>
+
+<style scoped>
+
+.now-card { gap: 8px; }
+.now-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.now-title { font: 700 1.25rem/1.3 var(--display); }
+.now-start { margin-top: 6px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.goal-of { color: var(--dawn-ink); }
+.moment { margin-top: 6px; background: var(--dawn-soft); color: var(--dawn-ink); animation: pop var(--dur) var(--ease-out); }
+.moment .ic { width: 14px; height: 14px; }
+@keyframes pop { from { opacity: 0; transform: scale(0.9); } }
+@media (prefers-reduced-motion: reduce) { .moment { animation: none; } }
+/* Whole card is the tap target; buttons inside it sit above the cover. */
+.tap { position: relative; isolation: isolate; cursor: pointer; transition: transform var(--dur-press) var(--ease-out), box-shadow var(--dur) var(--ease-out); }
+.tap:active { transform: scale(0.985); }
+@media (hover: hover) { .tap:hover { box-shadow: var(--shadow-md); } }
+.tap-cover { position: absolute; inset: 0; z-index: 0; border: 0; border-radius: inherit; background: none; cursor: pointer; }
+.tap > :not(.tap-cover) { position: relative; z-index: 1; pointer-events: none; }
+.tap > :not(.tap-cover) :is(a, button, input, .exercise-list li > *) { pointer-events: auto; }
+.tap-label { display: inline-flex; align-items: center; gap: 4px; }
+.tap-label .ic { width: 14px; height: 14px; }
+.detail-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.detail-list li { display: flex; align-items: center; gap: 12px; }
+.detail-main { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.pain-high { color: var(--danger-ink); }
+.more-list { padding: 4px 6px; gap: 0; }
+.more-row { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 10px; color: inherit; text-decoration: none; border-radius: 12px; transition: background-color var(--dur-fast) var(--ease-out); }
+.more-row + .more-row { border-top: 1px solid var(--line); }
+.more-row > .ic:first-child { flex: none; color: var(--pine); }
+.more-row b, .more-text { flex: 1; min-width: 0; }
+.more-text { display: grid; gap: 2px; }
+.more-row:active { background: var(--sunken); }
+.more-row .chev { flex: none; color: var(--ink-3); }
+.talk-tile { position: relative; color: inherit; text-decoration: none; padding-right: 44px; }
+.talk-chev { position: absolute; right: 16px; top: 50%; transform: translateY(-50%); color: var(--ink-3); }
+</style>

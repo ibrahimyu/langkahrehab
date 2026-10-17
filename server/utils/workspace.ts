@@ -1,10 +1,11 @@
 import type { H3Event } from "h3";
 import { getAuth } from "firebase-admin/auth";
+import { seedAccounts } from "#shared/accounts";
 import { seedCases } from "#shared/cases";
-import { nowFor, type Patient, type Workspace } from "#shared/model";
+import { isoDate, type Patient, type Workspace } from "#shared/model";
 
 /**
- * Which demo copy this request belongs to. With Firebase configured, the visitor's anonymous
+ * Which copy of the data this request belongs to. With Firebase configured, the visitor's anonymous
  * Firebase user id (verified ID token); without it, a random id the browser keeps (local development).
  */
 export async function workspaceId(event: H3Event): Promise<string> {
@@ -22,18 +23,41 @@ export async function workspaceId(event: H3Event): Promise<string> {
   return `local-${id}`;
 }
 
-/** Creates the demo copy with the prepared cases on first use. */
+/** Creates the copy with the prepared cases on first use. */
 export async function seed(ws: string) {
-  const w: Workspace = { createdAt: new Date().toISOString(), offsetDays: 0 };
+  const w: Workspace = { createdAt: new Date().toISOString(), accounts: seedAccounts() };
   await resetWorkspace(ws, w, seedCases(Date.now()));
   return w;
 }
 
-/** The request's workspace (seeded if new) and the demo clock. */
+const cycles = new Map<string, ReturnType<typeof runDailyCycle>>();
+
+/** The request's workspace (seeded if new). The daily navigator cycle runs on the first request of each day. */
 export async function context(event: H3Event) {
   const ws = await workspaceId(event);
-  const workspace = (await getWorkspace(ws)) ?? (await seed(ws));
-  return { ws, workspace, now: nowFor(workspace) };
+  let workspace = await getWorkspace(ws);
+  // A copy whose clock was moved forward has sessions dated in the future: start it again.
+  if (!workspace || workspace.offsetDays) {
+    // SYS-02: every new copy writes seed data; limit how many one visitor can create (production store only).
+    if (useRuntimeConfig().storage === "firestore") rateLimit(event, "", "ws-new", 10, 3_600_000);
+    workspace = await seed(ws);
+  }
+  if (!workspace.accounts) {
+    workspace = { ...workspace, accounts: seedAccounts() };
+    await setWorkspace(ws, workspace);
+  }
+  const now = Date.now();
+  if (workspace.lastDailyCycle !== isoDate(new Date(now))) {
+    // Parallel first requests of the day share one run.
+    let run = cycles.get(ws);
+    if (!run) {
+      run = runDailyCycle(event, ws, workspace, now).finally(() => cycles.delete(ws));
+      cycles.set(ws, run);
+    }
+    const cycle = await run;
+    workspace = { ...workspace, lastDailyCycle: cycle.date, triage: {} };
+  }
+  return { ws, workspace, now };
 }
 
 /** Context plus the patient named in the route. */

@@ -1,15 +1,18 @@
 // Rep counting from MediaPipe pose landmarks: one movement signal per exercise (an angle in
 // degrees), counted with two thresholds so jitter around one value cannot double-count.
 
+import type { RepScore } from "./form";
+
 export type Landmark = { x: number; y: number; z?: number; visibility?: number };
 export type Side = "left" | "right";
 /** "none" is for testers without an amputation: `side` is then the leg that does the exercise. */
 export type Level = "none" | "below_knee" | "above_knee";
-export type Limb = { level: Level; side: Side };
+/** `arm`: the amputated arm, when there is one; arm exercises are measured on that side. */
+export type Limb = { level: Level; side: Side; arm?: { side: Side; elbowLost: boolean } };
 
 const IDX = {
-  left: { shoulder: 11, hip: 23, knee: 25, ankle: 27 },
-  right: { shoulder: 12, hip: 24, knee: 26, ankle: 28 },
+  left: { shoulder: 11, elbow: 13, wrist: 15, hip: 23, knee: 25, ankle: 27 },
+  right: { shoulder: 12, elbow: 14, wrist: 16, hip: 24, knee: 26, ankle: 28 },
 } as const;
 type Joint = keyof (typeof IDX)["left"];
 
@@ -34,7 +37,6 @@ export const MIN_VISIBILITY = 0.5;
 
 const other = (s: Side): Side => (s === "left" ? "right" : "left");
 const pt = (lm: Landmark[], side: Side, j: Joint) => lm[IDX[side][j]]!;
-const mid = (a: Landmark, b: Landmark): Landmark => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
 
 /** Angle ABC in degrees (0–180), in the image plane. */
 export function angle(a: Landmark, b: Landmark, c: Landmark) {
@@ -50,34 +52,39 @@ export function elevation(from: Landmark, to: Landmark) {
 }
 
 const NO_KNEE = "Above-knee amputation: there is no knee point on that side, so this movement cannot be measured in this test.";
+const NO_ELBOW = "Amputation at or above the elbow: there is no elbow point on that side, so this movement cannot be measured.";
 
 export function tracking(exerciseId: string, limb: Limb): Tracking | null {
   const amp = limb.side;
   const good = other(amp);
   switch (exerciseId) {
-    case "bridging":
-      // Hips rise: the shoulder–hip–knee angle of the intact leg opens towards straight.
+    case "bridging": {
+      // Hips rise: the shoulder–hip–knee angle opens towards straight. Watched on the amputated leg
+      // (it rests on the towel and moves with the hips); above the knee there is no knee point there,
+      // so the intact leg is watched instead.
+      const leg = limb.level === "above_knee" ? good : amp;
       return {
-        label: "Hip angle (shoulder–hip–knee, intact side)",
+        label: "Hip angle (shoulder–hip–knee)",
         up: 160,
         down: 145,
         range: [100, 185],
         camera: "Side view at floor level, about 2 m away, whole body in frame.",
-        uses: [[good, "shoulder"], [good, "hip"], [good, "knee"]],
-        compute: (lm) => angle(pt(lm, good, "shoulder"), pt(lm, good, "hip"), pt(lm, good, "knee")),
+        uses: [[leg, "shoulder"], [leg, "hip"], [leg, "knee"]],
+        compute: (lm) => angle(pt(lm, leg, "shoulder"), pt(lm, leg, "hip"), pt(lm, leg, "knee")),
       };
+    }
     case "side-lying-abduction":
-      // Top leg lifts: the angle between the two thighs at the middle of the hips grows.
+      // The top (amputated) leg lifts away from the line of the body: 180° minus the
+      // shoulder–hip–knee angle on that side. The other leg moving does not count.
       return {
-        label: "Angle between the thighs",
-        up: 25,
-        down: 12,
+        label: "Leg lift (degrees from the line of the body)",
+        up: 18,
+        down: 8,
         range: [0, 60],
         camera: "From the feet or the front, about 2 m away, both hips and knees in frame.",
         unsupported: limb.level === "above_knee" ? NO_KNEE : undefined,
-        uses: [[good, "hip"], [amp, "hip"], [good, "knee"], [amp, "knee"]],
-        compute: (lm) =>
-          angle(pt(lm, good, "knee"), mid(pt(lm, good, "hip"), pt(lm, amp, "hip")), pt(lm, amp, "knee")),
+        uses: [[amp, "shoulder"], [amp, "hip"], [amp, "knee"]],
+        compute: (lm) => 180 - angle(pt(lm, amp, "shoulder"), pt(lm, amp, "hip"), pt(lm, amp, "knee")),
       };
     case "prone-hip-extension":
       // Lying on the stomach: the thigh of the exercising leg tilts upwards from the hip.
@@ -102,8 +109,42 @@ export function tracking(exerciseId: string, limb: Limb): Tracking | null {
         uses: [[good, "hip"], [good, "knee"], [good, "ankle"]],
         compute: (lm) => angle(pt(lm, good, "hip"), pt(lm, good, "knee"), pt(lm, good, "ankle")),
       };
+    case "arm-raise-forward": {
+      // The arm lifts forward: the hip–shoulder–elbow angle opens.
+      const arm = limb.arm?.side ?? limb.side;
+      return {
+        label: "Shoulder angle (hip–shoulder–elbow)",
+        up: 70,
+        down: 35,
+        range: [0, 180],
+        camera: "Side view at chest height, about 2 m away, the exercising arm towards the camera.",
+        unsupported: limb.arm?.elbowLost ? NO_ELBOW : undefined,
+        uses: [[arm, "hip"], [arm, "shoulder"], [arm, "elbow"]],
+        compute: (lm) => angle(pt(lm, arm, "hip"), pt(lm, arm, "shoulder"), pt(lm, arm, "elbow")),
+      };
+    }
+    case "elbow-bend": {
+      // The elbow bends: 180° minus the shoulder–elbow–wrist angle grows.
+      const arm = limb.arm?.side ?? limb.side;
+      return {
+        label: "Elbow bend (degrees from straight)",
+        up: 60,
+        down: 25,
+        range: [0, 160],
+        camera: "Front or side view at chest height, about 1.5 m away, the whole arm in frame.",
+        unsupported: limb.arm?.elbowLost ? NO_ELBOW : undefined,
+        uses: [[arm, "shoulder"], [arm, "elbow"], [arm, "wrist"]],
+        compute: (lm) => 180 - angle(pt(lm, arm, "shoulder"), pt(lm, arm, "elbow"), pt(lm, arm, "wrist")),
+      };
+    }
   }
   return null;
+}
+
+/** The limb the camera watches for this exercise, for the label on screen ("your left leg"). */
+export function watched(t: Tracking): { side: Side; part: "leg" | "arm" } {
+  const [side, joint] = t.uses[t.uses.length - 1]!;
+  return { side, part: joint === "elbow" || joint === "wrist" ? "arm" : "leg" };
 }
 
 /** Landmarks the tracking needs that the camera cannot see well enough. */
@@ -113,8 +154,8 @@ export function missing(t: Tracking, lm: Landmark[]) {
     .map(([side, joint]) => `${side} ${joint}`);
 }
 
-export type Cue = "hold_longer" | "slow_down";
-export type RepEvent = { count: number; heldMs: number; durationMs: number; peak: number; cue: Cue | null };
+export type Cue = "hold_longer" | "slow_down" | "go_further";
+export type RepEvent = { count: number; heldMs: number; durationMs: number; peak: number; cue: Cue | null; form?: RepScore };
 
 /** Counts a rep when the signal goes above `up` and comes back below `down`. */
 export class RepCounter {

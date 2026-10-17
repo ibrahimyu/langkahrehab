@@ -4,3 +4,6 @@ node_modules
 .data
 .env
 .DS_Store
+_dev/
+CLAUDE.local.md
+_arsip/

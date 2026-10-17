@@ -1,7 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, onAuthStateChanged, signInAnonymously, type User } from "firebase/auth";
 
-// Each visitor signs in anonymously and gets their own demo copy of the prepared cases.
+// Each visitor signs in anonymously and gets their own copy of the prepared cases.
 // Without a Firebase config (local development), useApi falls back to a random browser id.
 export default defineNuxtPlugin(() => {
   const config = useRuntimeConfig().public.firebase;

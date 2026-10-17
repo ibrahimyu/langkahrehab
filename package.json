@@ -8,15 +8,18 @@
     "build": "nuxt build",
     "preview": "nuxt preview",
     "typecheck": "nuxt typecheck",
-    "test": "node --import tsx --test test/*.test.ts",
+    "test": "node scripts/check-design.mjs && node --import tsx --test test/*.test.ts",
+    "check:design": "node scripts/check-design.mjs",
     "postinstall": "nuxt prepare",
-    "start": "node .output/server/index.mjs"
+    "start": "node .output/server/index.mjs",
+    "eval:companion": "node --import tsx scripts/eval-companion.mjs"
   },
   "dependencies": {
     "@google/genai": "2.27.0",
     "@mediapipe/tasks-vision": "1.0.1",
     "firebase": "12.19.0",
     "firebase-admin": "14.5.0",
+    "lucide-vue-next": "^1.0.0",
     "nuxt": "^4.5.2",
     "vue": "^3.5.30",
     "vue-router": "^4.6.4"

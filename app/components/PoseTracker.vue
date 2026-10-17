@@ -1,89 +1,73 @@
 <script setup lang="ts">
-import { tracking, type Limb, type RepEvent } from "#shared/pose";
+import { tracking, watched, type Limb, type RepEvent } from "#shared/pose";
 import type { PoseModel } from "../composables/usePoseTracker";
 
+// Camera with the pose skeleton drawn on top. Counts and scores reps while `counting` is on.
+// Frames are processed on the phone and never sent anywhere.
 const props = defineProps<{
   exerciseId: string;
   limb: Limb;
   holdSeconds: number;
-  /** Count reps only while this is on (e.g. during a set). */
   counting: boolean;
   model: PoseModel;
-  /** Patient view: camera and status only, no tuning controls. */
-  compact?: boolean;
+  /** Show the live angle and its last 10 seconds, for checking how the measurement behaves. */
+  analysis?: boolean;
 }>();
-const emit = defineEmits<{ rep: [e: RepEvent] }>();
+const emit = defineEmits<{ rep: [e: RepEvent]; top: [] }>();
+const T = useT();
 
 const video = ref<HTMLVideoElement | null>(null);
 const overlay = ref<HTMLCanvasElement | null>(null);
 const chart = ref<HTMLCanvasElement | null>(null);
-const mirror = ref(true);
-const up = ref(0);
-const down = ref(0);
 
 const t = computed(() => tracking(props.exerciseId, props.limb));
-const tracker = usePoseTracker({ video, overlay, chart, onRep: (e) => emit("rep", e) });
+const tracker = usePoseTracker({ video, overlay, chart, onRep: (e) => emit("rep", e), onTop: () => emit("top") });
 
-watch(
-  [t, () => props.holdSeconds],
-  () => {
-    tracker.configure(t.value, props.holdSeconds * 1000);
-    up.value = t.value?.up ?? 0;
-    down.value = t.value?.down ?? 0;
-  },
-  { immediate: true },
-);
-watch([up, down], () => tracker.setThresholds(Number(up.value), Number(down.value)));
+watch([t, () => props.holdSeconds], () => tracker.configure(t.value, props.holdSeconds * 1000), { immediate: true });
 watch(() => props.counting, (on) => (tracker.counting.value = on), { immediate: true });
 
-const status = computed(() => {
-  if (tracker.state.value === "loading") return "Loading the pose model…";
-  if (tracker.state.value !== "running") return "Camera off";
-  if (!tracker.person.value) return "No person in view";
-  if (tracker.missing.value.length) return `Can’t see: ${tracker.missing.value.join(", ")}`;
-  return props.counting ? "Tracking and counting" : "Tracking (not counting)";
+/** What the patient should fix before the camera can count; null when everything is in view. */
+const framing = computed(() => {
+  const s = tracker.state.value;
+  if (s === "loading") return T("camLoading");
+  if (s === "error") return tracker.error.value;
+  if (s !== "running" || !t.value) return null;
+  if (!tracker.person.value) return T("camNoPerson");
+  if (tracker.missing.value.length) return T("camFraming");
+  return null;
 });
+/** Which limb is measured, in words, so the patient knows which one to move. */
+const watching = computed(() => {
+  if (!t.value || t.value.unsupported) return null;
+  const w = watched(t.value);
+  return T(`camWatch_${w.part}`, { side: T(w.side) });
+});
+const ready = computed(() => tracker.state.value === "running" && !!t.value && !framing.value);
 
-defineExpose({ reset: tracker.reset, count: tracker.count, state: tracker.state, start: () => tracker.start(props.model), stop: tracker.stop });
+defineExpose({ framing, reset: tracker.reset, start: () => tracker.start(props.model), stop: tracker.stop, lastMove: tracker.lastMove, ready, trackable: computed(() => !!t.value && !t.value.unsupported) });
 </script>
 
 <template>
   <div class="tracker">
-    <p v-if="t?.unsupported" class="alert"><b>Not trackable</b><span>{{ t.unsupported }}</span></p>
-    <p v-else-if="t" class="hint">📷 {{ t.camera }}</p>
-
-    <div class="camera" :class="{ mirror }">
+    <div class="camera mirror">
       <video ref="video" playsinline muted />
       <canvas ref="overlay" />
-      <div class="camera-count" :class="{ top: tracker.atTop.value }">
-        <b>{{ tracker.count.value }}</b>
-        <span>{{ tracker.atTop.value ? "top" : "reps" }}</span>
-      </div>
-      <p v-if="tracker.state.value !== 'running'" class="camera-off">{{ status }}</p>
+      <p v-if="framing" class="camera-hint" role="status">{{ framing }}</p>
+      <p v-else-if="watching && tracker.state.value === 'running'" class="camera-watch">{{ watching }}</p>
     </div>
-
-    <div class="bar tracker-status">
-      <span class="pill" :class="{ listening: tracker.state.value === 'running' && !tracker.missing.value.length && tracker.person.value, error: tracker.missing.value.length > 0 }">{{ status }}</span>
-      <span class="hint">{{ tracker.fps.value }} fps</span>
+    <div v-if="analysis && t" class="analysis">
+      <p class="analysis-now"><b>{{ tracker.value.value ?? "–" }}°</b> <span class="hint">{{ t.label }}</span></p>
+      <canvas ref="chart" class="analysis-chart" />
+      <p class="hint">{{ T("labThresholds", { up: t.up, down: t.down }) }} · {{ tracker.fps.value }} fps</p>
     </div>
-
-    <template v-if="t && !compact">
-      <p class="signal"><b>{{ tracker.value.value ?? "–" }}°</b> {{ t.label }}</p>
-      <canvas ref="chart" class="chart" />
-      <p class="hint legend"><span class="up">- - top {{ up }}°</span> <span class="down">- - start {{ down }}°</span> · last 10 seconds</p>
-    </template>
-
-    <div v-if="!compact" class="row">
-      <label><span>Top threshold (°)</span><input v-model.number="up" type="number" step="1" /></label>
-      <label><span>Start threshold (°)</span><input v-model.number="down" type="number" step="1" /></label>
-    </div>
-    <div v-if="!compact" class="controls">
-      <button v-if="tracker.state.value !== 'running'" class="primary" :disabled="tracker.state.value === 'loading' || !!t?.unsupported" @click="tracker.start(model)">
-        {{ tracker.state.value === "loading" ? "Starting…" : "Start camera" }}
-      </button>
-      <button v-else class="ghost" @click="tracker.stop()">Stop camera</button>
-      <label class="check inline"><input v-model="mirror" type="checkbox" /> Mirror view</label>
-    </div>
-    <p v-if="tracker.error.value" class="error">{{ tracker.error.value }}</p>
   </div>
 </template>
+
+<style scoped>
+.camera-watch { position: absolute; left: 50%; top: 12px; transform: translateX(-50%); margin: 0; padding: 6px 12px; border-radius: var(--r-pill); font-size: 0.875rem; font-weight: 700; white-space: nowrap; background: color-mix(in srgb, var(--dawn) 92%, transparent); color: var(--ink); }
+.analysis { display: grid; gap: 6px; margin-top: 8px; }
+.analysis-now { margin: 0; display: flex; gap: 8px; align-items: baseline; }
+.analysis-now b { font: 700 1.5rem/1 var(--display); }
+.analysis-chart { width: 100%; height: 110px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+.camera-hint { position: absolute; left: 12px; right: 12px; top: 50%; transform: translateY(-50%); margin: 0; padding: 12px 14px; border-radius: 14px; text-align: center; font-weight: 600; background: color-mix(in srgb, var(--night) 78%, transparent); color: var(--on-night); }
+</style>

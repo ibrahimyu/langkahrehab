@@ -32,10 +32,12 @@ test("cues: short hold and too fast", () => {
   assert.equal(fast.push(110, 800)!.cue, "slow_down");
 });
 
-test("tracking picks the intact side and blocks above-knee where no knee exists", () => {
+test("tracking watches the amputated leg, the intact one only where no knee exists", () => {
   const bridging = tracking("bridging", { level: "above_knee", side: "left" })!;
   assert.equal(bridging.unsupported, undefined);
   assert.ok(bridging.uses.every(([side]) => side === "right"));
+  assert.ok(tracking("bridging", { level: "below_knee", side: "left" })!.uses.every(([side]) => side === "left"));
+  assert.ok(tracking("side-lying-abduction", { level: "below_knee", side: "left" })!.uses.every(([side]) => side === "left"));
   assert.match(tracking("prone-hip-extension", { level: "above_knee", side: "right" })!.unsupported!, /no knee/);
   assert.equal(tracking("prone-hip-extension", { level: "below_knee", side: "right" })!.unsupported, undefined);
   assert.equal(tracking("unknown", { level: "none", side: "left" }), null);
@@ -43,13 +45,25 @@ test("tracking picks the intact side and blocks above-knee where no knee exists"
 
 test("bridging signal from synthetic landmarks", () => {
   const lm: Landmark[] = Array.from({ length: 33 }, () => ({ x: 0, y: 0, visibility: 0.9 }));
-  // Right side (intact when the left is amputated): shoulder, hip, knee in a straight line.
-  lm[12] = { x: 0.2, y: 0.6, visibility: 0.9 };
-  lm[24] = { x: 0.5, y: 0.6, visibility: 0.9 };
-  lm[26] = { x: 0.8, y: 0.6, visibility: 0.9 };
+  // Left side (the amputated, below-knee leg): shoulder, hip, knee in a straight line.
+  lm[11] = { x: 0.2, y: 0.6, visibility: 0.9 };
+  lm[23] = { x: 0.5, y: 0.6, visibility: 0.9 };
+  lm[25] = { x: 0.8, y: 0.6, visibility: 0.9 };
   const t = tracking("bridging", { level: "below_knee", side: "left" })!;
   assert.equal(Math.round(t.compute(lm)), 180);
   assert.deepEqual(missing(t, lm), []);
-  lm[26] = { ...lm[26]!, visibility: 0.2 };
-  assert.deepEqual(missing(t, lm), ["right knee"]);
+  lm[25] = { ...lm[25]!, visibility: 0.2 };
+  assert.deepEqual(missing(t, lm), ["left knee"]);
+});
+
+test("side-lying lift counts only the amputated leg", () => {
+  const t = tracking("side-lying-abduction", { level: "below_knee", side: "left" })!;
+  const lm: Landmark[] = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.5, visibility: 0.9 }));
+  lm[11] = { x: 0.5, y: 0.2, visibility: 0.9 };
+  lm[23] = { x: 0.5, y: 0.5, visibility: 0.9 };
+  lm[25] = { x: 0.5, y: 0.8, visibility: 0.9 }; // in line with the body
+  lm[26] = { x: 0.9, y: 0.7, visibility: 0.9 }; // the other leg far out: ignored
+  assert.equal(Math.round(t.compute(lm)), 0);
+  lm[25] = { x: 0.6, y: 0.8, visibility: 0.9 }; // the amputated leg lifts
+  assert.ok(t.compute(lm) > 15);
 });

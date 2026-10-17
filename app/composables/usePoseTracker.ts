@@ -1,4 +1,5 @@
 import type { PoseLandmarker } from "@mediapipe/tasks-vision";
+import { scoreRep } from "#shared/form";
 import { RepCounter, missing as missingLandmarks, type Landmark, type RepEvent, type Tracking } from "#shared/pose";
 
 // Pinned to the installed package version so the WebAssembly files match the JavaScript.
@@ -24,6 +25,8 @@ export function usePoseTracker(els: {
   overlay: Ref<HTMLCanvasElement | null>;
   chart: Ref<HTMLCanvasElement | null>;
   onRep?: (e: RepEvent) => void;
+  /** The movement reached the top (start of the hold). */
+  onTop?: () => void;
 }) {
   const state = ref<TrackerState>("idle");
   const error = ref("");
@@ -34,6 +37,8 @@ export function usePoseTracker(els: {
   const atTop = ref(false);
   const fps = ref(0);
   const counting = ref(false);
+  /** Last time the movement changed direction or a rep was counted (performance.now()). */
+  const lastMove = ref(0);
 
   let landmarker: PoseLandmarker | undefined;
   let connections: { start: number; end: number }[] = [];
@@ -63,6 +68,7 @@ export function usePoseTracker(els: {
 
   function reset() {
     counter.reset();
+    lastMove.value = 0;
     count.value = 0;
     atTop.value = false;
   }
@@ -80,7 +86,7 @@ export function usePoseTracker(els: {
     const H = canvas.height;
     const used = new Set((tracking?.uses ?? []).map(([side, joint]) => `${side}:${joint}`));
     const usedIdx = new Set<number>();
-    const idx = { left: { shoulder: 11, hip: 23, knee: 25, ankle: 27 }, right: { shoulder: 12, hip: 24, knee: 26, ankle: 28 } };
+    const idx = { left: { shoulder: 11, elbow: 13, wrist: 15, hip: 23, knee: 25, ankle: 27 }, right: { shoulder: 12, elbow: 14, wrist: 16, hip: 24, knee: 26, ankle: 28 } };
     for (const side of ["left", "right"] as const)
       for (const [joint, i] of Object.entries(idx[side])) if (used.has(`${side}:${joint}`)) usedIdx.add(i);
 
@@ -154,9 +160,14 @@ export function usePoseTracker(els: {
     while (history.length && now - history[0]!.t > HISTORY_MS) history.shift();
     if (counting.value) {
       const e = counter.push(smooth, now);
+      if (counter.atTop !== atTop.value || !lastMove.value) lastMove.value = now;
+      if (counter.atTop && !atTop.value) els.onTop?.();
       atTop.value = counter.atTop;
       if (e) {
+        e.form = scoreRep(e, { up: counter.up, down: counter.down, holdMs: counter.holdMs });
+        if (!e.cue && e.form.weakest === "range") e.cue = "go_further";
         count.value = e.count;
+        lastMove.value = now;
         els.onRep?.(e);
       }
     }
@@ -222,5 +233,5 @@ export function usePoseTracker(els: {
 
   onBeforeUnmount(stop);
 
-  return { state, error, value, missing, person, count, atTop, fps, counting, start, stop, configure, setThresholds, reset };
+  return { state, error, value, missing, person, count, atTop, fps, counting, lastMove, start, stop, configure, setThresholds, reset };
 }

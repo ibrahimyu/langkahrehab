@@ -15,7 +15,7 @@ const record = (before: number | null, after: number | null, concern: SessionRec
 
 test("seed cases are complete", () => {
   const c = cases();
-  assert.deepEqual(c.map((p) => p.id), ["budi", "sari", "liem", "tester"]);
+  assert.deepEqual(c.map((p) => p.id), ["budi", "sari", "liem", "rafi", "tester"]);
   for (const p of c) assert.ok(p.plan.items.length >= 1);
 });
 
@@ -25,6 +25,15 @@ test("a concern stops and alerts doctor and physio", () => {
   assert.equal(r.nextAction.kind, "stop_contact");
   assert.equal(r.alerts[0]!.severity, "urgent");
   assert.deepEqual(r.alerts[0]!.for, ["doctor", "physio"]);
+});
+
+test("distress is an urgent wellbeing alert, never merged with an open one", () => {
+  const sari = cases()[1]!;
+  const r = afterSession(sari, record(1, 2, { kind: "distress", details: "no point living", source: "keyword_fallback" }), NOW);
+  assert.equal(r.alerts[0]!.kind, "wellbeing");
+  assert.equal(r.alerts[0]!.severity, "urgent");
+  assert.match(r.alerts[0]!.message, /safety check/);
+  assert.equal(r.nextAction.kind, "stop_contact");
 });
 
 test("high pain and a jump of 3 both alert", () => {
@@ -55,14 +64,16 @@ test("daily checks: missed sessions and review due, without duplicates", () => {
 });
 
 test("adherence and coach instructions", () => {
-  const [budi, sari, , tester] = cases();
+  const c = cases();
+  const [budi, sari] = c;
+  const tester = c.find((p) => p.id === "tester");
   assert.ok(weekAdherence(sari!, NOW)! > weekAdherence(budi!, NOW)!);
   assert.equal(weekAdherence(tester!, NOW), 0);
   const text = buildInstruction(budi!, { mode: "camera", askDiary: true }, coachContext(budi!));
   assert.match(text, /Pak Budi, 58/);
-  assert.match(text, /Below-knee amputation of the left leg/);
+  assert.match(text, /Below-knee amputation, left leg/);
   assert.match(text, /1\. Angkat pinggul/);
   assert.match(text, /2\. Angkat kaki ke samping/);
-  assert.match(text, /walk to the mosque/);
-  assert.match(text, /The camera counts the reps/);
+  assert.match(text, /jalan sendiri lagi/);
+  assert.match(text, /The camera counts and checks every rep/);
 });

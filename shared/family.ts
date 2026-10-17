@@ -1,0 +1,340 @@
+// The family's side of Langkah (KEL-01…07): what they may see, the jobs they share, and the rules
+// behind them. Pure functions, used by the server and the screens, with tests in test/family.test.ts.
+
+import type { Lang } from "./exercises";
+import { addDays, dayKey, nextVisit } from "./calendar";
+import { t, type TextKey } from "./i18n";
+import { templateById, TASK_TEMPLATES, type TaskTemplate } from "./familyTaskTemplates";
+import {
+  DAY,
+  FAMILY_RELATIONS,
+  FAMILY_TASKS_MAX,
+  TASK_CATEGORIES,
+  TASK_COSTS,
+  REMIND_EVERY,
+  SOURCE_KINDS,
+  SOURCING_STATUS,
+  newId,
+  pick,
+  pickLang,
+  str,
+  type DischargeLetter,
+  type FamilyMember,
+  type FamilyTask,
+  type FamilyUpdate,
+  type Patient,
+  type SourceOption,
+  type Sourcing,
+  type TaskReminder,
+  type Text3,
+} from "./model";
+
+/** Crisis line shown with 112 (KEL-06, SYS-01). TODO: verify number before production. */
+export const CRISIS_LINE = "119";
+/** Made-up clinic number, labelled "Demo" on screen. */
+export const CLINIC_PHONE = "+62 21 5550 0199";
+
+/** Pain as a word for the family (KEL-02): 0 none · 1–3 mild · 4–6 moderate · 7–10 strong. */
+export type PainWord = "none" | "mild" | "moderate" | "strong";
+export function painWord(n: number | null | undefined): PainWord | null {
+  if (n === null || n === undefined || !Number.isFinite(n)) return null;
+  if (n <= 0) return "none";
+  if (n <= 3) return "mild";
+  if (n <= 6) return "moderate";
+  return "strong";
+}
+
+export const textOf = (v: Text3 | string, lang: Lang) => (typeof v === "string" ? v : v[lang] || v.en);
+
+/**
+ * Free text from the family must not ask for standing, walking or other weight-bearing work:
+ * those tasks only come from approved templates (KEL-03).
+ */
+const BODY_WORDS = /\b(stand|standing|walk|walking|stairs?|steps|jump|squat|kneel|lift|carry)\b|berdiri|jalan|berjalan|tangga|jongkok|melompat|angkat|站|走|楼梯|蹲|跳/i;
+export const loadsBody = (text: string) => BODY_WORDS.test(text);
+
+// ---- Task generation (KEL-03) ----
+
+const HOME: FamilyTask["category"][] = ["home_safety", "equipment", "other_foot", "company"];
+
+function wanted(p: Pick<Patient, "profile" | "plan">, now: number): TaskTemplate[] {
+  const risky = p.profile.cause === "diabetes" || p.profile.cause === "vascular";
+  const walker = /walker/i.test(p.profile.restrictions) || p.profile.stage === "pre_prosthetic";
+  const review = p.plan.reviewDate;
+  const today = dayKey(now);
+  const visitSoon = !!review && review >= today && review <= addDays(today, 2);
+  return TASK_TEMPLATES.filter((tpl) => {
+    if (tpl.id === "borrow_walker") return walker;
+    if (tpl.category === "other_foot") return risky;
+    if (tpl.id === "bring_questions") return visitSoon;
+    return true;
+  });
+}
+
+/** True when this template already has a task that should stop a new copy. */
+function covered(tpl: TaskTemplate, tasks: FamilyTask[], p: Pick<Patient, "plan">, now: number) {
+  const same = tasks.filter((x) => x.templateId === tpl.id);
+  if (same.some((x) => x.status === "open")) return true;
+  if (!tpl.repeats) return same.length > 0;
+  if (tpl.repeats === "per_visit") return same.some((x) => x.dueDate === p.plan.reviewDate);
+  return same.some((x) => x.doneAt && now - Date.parse(x.doneAt) < 7 * DAY);
+}
+
+/**
+ * Picks templates for this patient and shares them out (KEL-03). Members who live with the patient
+ * get the home jobs; members further away get papers and visit questions. Each task goes to whoever
+ * has the fewest open tasks. Never adds a copy of a template that is still open.
+ */
+export function generateFamilyTasks(p: Pick<Patient, "profile" | "plan" | "family" | "familyTasks" | "dismissedTasks">, now: number): FamilyTask[] {
+  if (!p.family.length) return [];
+  const iso = new Date(now).toISOString();
+  const all = [...p.familyTasks];
+  const load = new Map(p.family.map((m) => [m.id, all.filter((x) => x.assigneeId === m.id && x.status === "open").length]));
+  const home = p.family.filter((m) => m.livesWithPatient);
+  const away = p.family.filter((m) => !m.livesWithPatient);
+  const made: FamilyTask[] = [];
+  const dismissed = p.dismissedTasks ?? [];
+  for (const tpl of wanted(p, now)) {
+    if (covered(tpl, all, p, now)) continue;
+    // Someone who removed this suggestion is never given it again; removed for everyone = not suggested.
+    const refused = new Set(dismissed.filter((d) => d.templateId === tpl.id).map((d) => d.memberId));
+    if (refused.has(null)) continue;
+    const isHome = HOME.includes(tpl.category);
+    const preferred = (isHome ? home : away).filter((m) => !refused.has(m.id));
+    const pool = preferred.length ? preferred : p.family.filter((m) => !refused.has(m.id));
+    if (!pool.length) continue;
+    const who = pool.reduce((a, b) => ((load.get(b.id) ?? 0) < (load.get(a.id) ?? 0) ? b : a));
+    load.set(who.id, (load.get(who.id) ?? 0) + 1);
+    const task: FamilyTask = {
+      id: newId(),
+      templateId: tpl.id,
+      title: { ...tpl.title },
+      detail: { ...tpl.detail },
+      assigneeId: who.id,
+      category: tpl.category,
+      cost: tpl.cost,
+      dueDate: tpl.repeats === "per_visit" ? p.plan.reviewDate : tpl.repeats === "weekly" ? addDays(dayKey(now), 6) : null,
+      status: "open",
+      source: "template",
+      createdAt: iso,
+      doneAt: null,
+      doneBy: null,
+    };
+    made.push(task);
+    all.push(task);
+  }
+  return made;
+}
+
+/** Open before done; the nearest date first; then the oldest. */
+export const byTaskOrder = (a: FamilyTask, b: FamilyTask) =>
+  Number(a.status === "done") - Number(b.status === "done") ||
+  (a.dueDate ?? "9999").localeCompare(b.dueDate ?? "9999") ||
+  a.createdAt.localeCompare(b.createdAt);
+
+// ---- Getting an item (navigator) and reminders ----
+
+/** Tasks about getting a thing: the navigator helps find it, and tracks a borrowed one. */
+const ITEM_TEMPLATES = new Set(["bathroom_mat", "chair_with_arms", "borrow_walker"]);
+export const needsItem = (t: Pick<FamilyTask, "category" | "templateId">) => t.category === "equipment" || ITEM_TEMPLATES.has(t.templateId ?? "");
+
+export const emptySourcing = (city = ""): Sourcing => ({ status: "looking", from: "", contact: "", returnBy: null, options: [], optionsAt: null, optionsBy: null, city });
+
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
+export function sanitizeReminder(b: any): TaskReminder | null {
+  if (!b || typeof b !== "object") return null;
+  const every = pick(b.every, REMIND_EVERY, "daily");
+  return { every, time: typeof b.time === "string" && TIME.test(b.time) ? b.time : "08:00" };
+}
+/** The family's own sourcing fields; the options list is only written by the server. */
+export function sanitizeSourcing(b: any, current: Sourcing | null | undefined): Sourcing {
+  const base = current ?? emptySourcing();
+  return {
+    ...base,
+    status: pick(b?.status, SOURCING_STATUS, base.status),
+    from: b?.from !== undefined ? str(b.from, 80) : base.from,
+    contact: b?.contact !== undefined ? str(b.contact, 60) : base.contact,
+    returnBy: b?.returnBy !== undefined ? (typeof b.returnBy === "string" && DATE.test(b.returnBy) ? b.returnBy : null) : base.returnBy,
+    city: b?.city !== undefined ? str(b.city, 60) : base.city,
+  };
+}
+const safeUrl = (v: unknown) => (typeof v === "string" && /^https:\/\/[^\s]{4,300}$/.test(v) ? v : null);
+/** Options from the model: at most 6, known kinds only, short text, https links only. */
+export function sanitizeOptions(raw: unknown): SourceOption[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((o: any) => ({ kind: pick(o?.kind, SOURCE_KINDS, "buy"), title: str(o?.title, 80), detail: str(o?.detail, 240), cost: str(o?.cost, 60), url: safeUrl(o?.url) }))
+    .filter((o) => o.title)
+    .sort((a, b) => SOURCE_KINDS.indexOf(a.kind) - SOURCE_KINDS.indexOf(b.kind))
+    .slice(0, 6);
+}
+
+const EVERY_DAYS = { daily: 1, every_2_days: 2, weekly: 7 } as const;
+/** Whether a reminder falls on this day (counted from the day the task was made). */
+export function reminderDue(t: FamilyTask, today: string): boolean {
+  if (!t.reminder || t.status === "done") return false;
+  const start = t.createdAt.slice(0, 10);
+  const days = Math.round((Date.parse(`${today}T12:00:00Z`) - Date.parse(`${start}T12:00:00Z`)) / DAY);
+  return days >= 0 && days % EVERY_DAYS[t.reminder.every] === 0;
+}
+/** RRULE for the phone calendar: repeats until the due date when there is one. */
+export const reminderRule = (r: TaskReminder, until: string | null) =>
+  `FREQ=DAILY;INTERVAL=${EVERY_DAYS[r.every]}${until ? `;UNTIL=${until.replace(/-/g, "")}T235959` : ""}`;
+/** A borrowed item due back within three days. */
+export const returnSoon = (t: FamilyTask, today: string) =>
+  t.sourcing?.status === "borrowed" && !!t.sourcing.returnBy && t.sourcing.returnBy <= addDays(today, 3);
+
+/** Plain text to share one or more tasks, in the reader's language, signed "— Langkah". */
+export function shareText(tasks: FamilyTask[], lang: Lang, heading?: string) {
+  const lines = tasks.map((x) => `• ${textOf(x.title, lang)}${x.detail ? `\n  ${textOf(x.detail, lang)}` : ""}`);
+  return [heading, ...lines, "— Langkah"].filter(Boolean).join("\n");
+}
+
+// ---- Input checks ----
+
+export function sanitizeMember(b: any, fallbackLang: Lang): Omit<FamilyMember, "id"> | null {
+  const name = str(b?.name, 60);
+  if (!name) return null;
+  const phone = str(b?.phone, 30).replace(/[^\d+ ()-]/g, "");
+  return {
+    name,
+    relation: pick(b?.relation, FAMILY_RELATIONS, "other"),
+    lang: b?.lang ? pickLang(b.lang) : fallbackLang,
+    phone: phone || null,
+    livesWithPatient: !!b?.livesWithPatient,
+  };
+}
+
+export const validId = (v: unknown) => (typeof v === "string" && /^[\w-]{1,64}$/.test(v) ? v : null);
+
+/** A task written by a person (family or care team); category and cost from the allowed lists. */
+export function sanitizeTaskInput(b: any) {
+  return {
+    title: str(b?.title, 120),
+    detail: str(b?.detail, 400),
+    category: pick(b?.category, TASK_CATEGORIES, "admin"),
+    cost: pick(b?.cost, TASK_COSTS, "free"),
+    dueDate: typeof b?.dueDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(b.dueDate) ? b.dueDate : null,
+  };
+}
+
+export const capTasks = (tasks: FamilyTask[]) => {
+  if (tasks.length <= FAMILY_TASKS_MAX) return tasks;
+  // Drop the oldest done tasks first.
+  const done = tasks.filter((x) => x.status === "done").sort((a, b) => (a.doneAt ?? "").localeCompare(b.doneAt ?? ""));
+  const drop = new Set(done.slice(0, tasks.length - FAMILY_TASKS_MAX).map((x) => x.id));
+  return tasks.filter((x) => !drop.has(x.id)).slice(-FAMILY_TASKS_MAX);
+};
+
+export { templateById };
+
+// ---- What the family sees (KEL-01, ROL-06) ----
+
+export type WeekFacts = {
+  days: number;
+  pain: PainWord | null;
+  nextVisit: string | null;
+  /** The last 7 days, oldest first: the date and whether there was a session. */
+  dayList?: { date: string; done: boolean }[];
+  /** Reps done in the last 7 days. */
+  reps?: number;
+  /** Pain after exercise at the end of the week compared with the start. */
+  painTrend?: "easier" | "same" | "harder" | null;
+  /** Family tasks finished in the last 7 days. */
+  tasksDone?: number;
+};
+
+export type FamilyView = {
+  id: string;
+  name: string;
+  lang: Lang;
+  family: FamilyMember[];
+  tasks: FamilyTask[];
+  today: { exercised: boolean; pain: PainWord | null; clinicNotified: boolean };
+  nextVisit: { date: string; time: string | null } | null;
+  /** The main goal and its steps, read-only (the journey in short). */
+  goal: { text: string; steps: { text: string; done: boolean }[] } | null;
+  week: WeekFacts;
+  update: FamilyUpdate | null;
+  /** Questions for the doctor from the patient and the family (not hidden ones), with answers. */
+  questions: { id: string; at: string; text: string; fromFamily: boolean; memberId: string | null; reply: string; answered: boolean }[];
+  letters: Omit<DischargeLetter, "image" | "pages">[];
+  letterExplanation: Patient["letterExplanation"] | null;
+  /** Pain before and after the last 14 sessions, and the doctor's limit (the same chart the patient sees). */
+  pain: { id: string; at: string; before: number | null; after: number | null }[];
+  painLimit: number;
+};
+
+export function weekFacts(p: Patient, now: number): WeekFacts {
+  const since = now - 7 * DAY;
+  const recent = p.sessions.filter((s) => Date.parse(s.at) >= since && Date.parse(s.at) <= now);
+  const pains = recent.map((s) => s.painAfter).filter((v): v is number => v !== null);
+  const done = new Set(recent.map((s) => dayKey(Date.parse(s.at))));
+  const today = dayKey(now);
+  const first = pains[0];
+  const last = pains.at(-1);
+  return {
+    days: done.size,
+    pain: painWord(pains.length ? Math.round(pains.reduce((a, b) => a + b, 0) / pains.length) : null),
+    nextVisit: nextVisit(p, now)?.date ?? null,
+    dayList: Array.from({ length: 7 }, (_, i) => addDays(today, i - 6)).map((date) => ({ date, done: done.has(date) })),
+    reps: recent.reduce((n, s) => n + s.exercises.reduce((m, e) => m + e.logged.reduce<number>((a, b) => a + (b ?? 0), 0), 0), 0),
+    painTrend: pains.length < 2 || first === undefined || last === undefined ? null : last < first ? "easier" : last > first ? "harder" : "same",
+    tasksDone: p.familyTasks.filter((t) => t.doneAt && Date.parse(t.doneAt) >= since).length,
+  };
+}
+
+/**
+ * The family's copy of the patient: no brief, diary, alert messages, clinical notes or skin findings.
+ * An urgent or high alert shows only as "the clinic has been notified".
+ */
+export function familyView(p: Patient, now: number): FamilyView {
+  const today = dayKey(now);
+  const todays = p.sessions.filter((s) => dayKey(Date.parse(s.at)) === today);
+  const visit = nextVisit(p, now);
+  const main = [...p.goals].sort((a, b) => Number(b.main) - Number(a.main))[0];
+  return {
+    id: p.id,
+    name: p.name,
+    lang: p.lang,
+    family: p.family,
+    tasks: p.familyTasks,
+    today: {
+      exercised: todays.length > 0,
+      pain: painWord(todays.at(-1)?.painAfter ?? null),
+      clinicNotified: p.alerts.some((a) => !a.resolvedAt && (a.severity === "urgent" || a.severity === "high")),
+    },
+    nextVisit: visit ? { date: visit.date, time: visit.time } : null,
+    goal: main ? { text: main.text, steps: main.targets.map((x) => ({ text: x.text, done: !!x.doneAt })) } : null,
+    week: weekFacts(p, now),
+    update: p.familyUpdate,
+    questions: p.notes
+      .filter((n) => n.kind === "question" && !n.private)
+      .map((n) => ({ id: n.id, at: n.at, text: n.quote, fromFamily: n.source === "family", memberId: n.familyMemberId ?? null, reply: n.reply, answered: !!(n.reply || n.answeredAt) })),
+    letters: p.letters.map(({ image, pages, ...l }) => l),
+    letterExplanation: p.letterExplanation ?? null,
+    pain: p.sessions.slice(-14).map((s) => ({ id: s.id, at: s.at, before: s.painBefore, after: s.painAfter })),
+    painLimit: p.plan.painThreshold,
+  };
+}
+
+/** This week's news from numbers only (KEL-04 fallback; the AI version must say the same). */
+/** The week as plain lines for sharing: the numbers first, so the message is useful on its own. */
+export function weeklyShare(name: string, w: WeekFacts, lang: Lang, dateText: (d: string) => string, dayName: (d: string) => string, news: string) {
+  const lines = [t(lang, "famShareHead", { name })];
+  const days = (w.dayList ?? []).filter((d) => d.done).map((d) => dayName(d.date)).join(", ");
+  lines.push(`• ${t(lang, "famNewsDays", { name, n: w.days })}${days ? ` (${days})` : ""}`);
+  if (w.reps) lines.push(`• ${t(lang, "famWeekReps", { n: w.reps })}`);
+  if (w.pain) lines.push(`• ${t(lang, "famNewsPain", { pain: t(lang, `painWord_${w.pain}` as TextKey) })}${w.painTrend ? ` (${t(lang, `famTrend_${w.painTrend}` as TextKey)})` : ""}`);
+  if (w.tasksDone) lines.push(`• ${t(lang, "famWeekTasks", { n: w.tasksDone })}`);
+  if (w.nextVisit) lines.push(`• ${t(lang, "famNewsVisit", { date: dateText(w.nextVisit) })}`);
+  return [...lines, "", news, "— Langkah"].join("\n");
+}
+
+export function weeklyNews(name: string, w: WeekFacts, lang: Lang, dateText: (d: string) => string) {
+  const parts = [w.days ? t(lang, "famNewsDays", { name, n: w.days }) : t(lang, "famNewsNoDays", { name })];
+  if (w.pain) parts.push(t(lang, "famNewsPain", { pain: t(lang, `painWord_${w.pain}` as TextKey) }));
+  if (w.nextVisit) parts.push(t(lang, "famNewsVisit", { date: dateText(w.nextVisit) }));
+  return parts.join(" ");
+}

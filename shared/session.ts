@@ -3,8 +3,9 @@
 // call is answered with an error instead of corrupting the log.
 
 import type { Exercise } from "./exercises";
+import { average, type RepScore } from "./form";
 import { heardCount } from "./numbers";
-import { CONCERNS, type ConcernKind, type CountMode, type Difficulty, type SessionExercise } from "./model";
+import { CONCERNS, type ConcernKind, type ConcernSource, type CountMode, type Difficulty, type SessionExercise } from "./model";
 
 export type Phase = "intro" | "ready" | "set" | "rest" | "after" | "done" | "stopped";
 
@@ -20,6 +21,8 @@ export type SetLog = {
   endedAt: number | null;
   /** Coach turns during the set that were not the end-of-set confirmation. */
   midSetTurns: number;
+  /** Camera form score of each counted rep. */
+  form: RepScore[];
 };
 
 export type SessionItem = { exercise: Exercise; sets: number; reps: number; log: SetLog[] };
@@ -35,14 +38,14 @@ export type Session = {
   painBefore: number | null;
   painAfter: number | null;
   difficulty: Difficulty | null;
-  concern: { kind: ConcernKind; details: string; at: number } | null;
+  concern: { kind: ConcernKind; details: string; at: number; source: ConcernSource } | null;
   restUntil: number | null;
 };
 
 export type ToolResponse = Record<string, unknown> & { ok: boolean };
 
 const newLog = (set: number): SetLog => ({
-  set, heardText: "", camera: null, logged: null, startedAt: null, endedAt: null, midSetTurns: 0,
+  set, heardText: "", camera: null, logged: null, startedAt: null, endedAt: null, midSetTurns: 0, form: [],
 });
 
 export function createSession(mode: CountMode, items: { exercise: Exercise; sets: number; reps: number }[]): Session {
@@ -130,9 +133,15 @@ export function applyTool(s: Session, name: string, args: Record<string, unknown
 
     case "report_concern": {
       const kind = CONCERNS.includes(args.kind as ConcernKind) ? (args.kind as ConcernKind) : "other";
-      s.concern = { kind, details: String(args.details ?? "").slice(0, 300), at: now };
+      const source: ConcernSource = args.source === "keyword_fallback" || args.source === "patient" ? args.source : "coach";
+      s.concern = { kind, details: String(args.details ?? "").slice(0, 300), at: now, source };
       s.phase = "stopped";
       s.restUntil = null;
+      if (kind === "distress")
+        return {
+          ok: true,
+          next: "The session is stopped. Speak slowly and gently. Say you are glad they told you and that they are not alone. Encourage them to talk to someone they trust now, and to call emergency services (112) if they might hurt themselves. Their care team has been told. Do not continue the exercise, do not give advice, and do not end the conversation abruptly.",
+        };
       return {
         ok: true,
         next: "The session is stopped. Tell the patient to stop exercising and rest, and to contact their clinic today, or emergency services if it is an emergency. The care team has been alerted. Do not continue the exercise.",
@@ -167,6 +176,7 @@ export function toRecordExercises(s: Session): SessionExercise[] {
     sets: i.sets,
     reps: i.reps,
     logged: i.log.map((l) => l.logged),
+    form: i.log.map((l) => average(l.form.map((r) => r.score))),
   }));
 }
 

@@ -1,17 +1,20 @@
 // System instruction and tools for the voice coach. Built on the server from the stored patient
 // and locked into the one-use Live token, so the browser cannot change what the coach is told.
 
-import { exerciseById, type Exercise, type Lang } from "./exercises";
+import { exerciseById, howTo, type Exercise, type Lang } from "./exercises";
+import { schedule } from "./planDiff";
 import { CONCERNS, DIARY_KINDS, MEMORY_KINDS, describeProfile, type CountMode, type Patient } from "./model";
 
 export type CoachOptions = {
   mode: CountMode;
   /** Ask about phantom limb pain once per session and log it in the diary. */
   askDiary: boolean;
+  /** Someone is with the patient: the coach may speak to them too. */
+  support?: "alone" | "helper";
 };
 
 const language: Record<Lang, string> = {
-  id: 'Speak only Indonesian (Bahasa Indonesia). Address the patient as "Bapak" or "Ibu" with their name.',
+  id: 'Speak only Indonesian (Bahasa Indonesia). Address the patient by their name as written (for example "Pak Budi"); if the name has no title, say "Anda". Never guess "Bapak" or "Ibu".',
   en: "Speak only English. Address the patient by name.",
   zh: "Speak only Mandarin Chinese (Simplified Chinese when written). Address the patient politely with 您.",
 };
@@ -21,15 +24,15 @@ const SIMPLE =
 
 const counting: Record<CountMode, string> = {
   camera:
-    'The camera counts the reps. While a set is in progress, stay silent. You will receive [APP] messages: "Camera: rep N" (do not reply to these), camera cues such as "hold longer" (say the cue in a few words, then stay silent again), and a message when the target is reached. When the set ends (target reached, or the patient says they are done or cannot continue), call log_set; the app uses the camera\'s count. Then confirm the count in a few words.',
+    'The camera counts and checks every rep. During a set, coach like a physio standing next to them, in very few words. For each "[APP] Camera: rep N" message say at most five words: the number, then either short praise ("yes, just like that") or the correction the message gives, in the words of that exercise ("lift your hips a little higher"). Never invent a correction the message does not give. If a message says the camera cannot see them, ask them to move the phone back. When the target is reached you get a message; then call log_set (the app uses the camera\'s count), confirm the count in a few words, and ask in one short question how that set felt. Listen to the answer: if it hurts more than usual, ask once more and call report_concern if needed; if it felt hard, tell them to go slowly on the next set.',
   patient:
     'The patient counts each rep aloud. While a set is in progress, stay completely silent: do not repeat the numbers, do not encourage, do not acknowledge anything. The set ends when the patient says they are done (for example "done", "selesai", "sudah", "好了"), reaches the target, or asks you something. Then call log_set with the last number the patient said and confirm the count in a few words.',
   coach:
     "You count the tempo for the patient. For each rep say the exercise's movement words, counting the hold if it has one, then the rep number, at a calm pace. Count exactly the target reps without stopping to chat. If the patient says they cannot continue, stop counting. Then call log_set with the number of reps completed.",
 };
 
-const describeItem = (e: Exercise, sets: number, reps: number, lang: Lang, i: number) =>
-  `${i + 1}. ${e.name[lang]} (${e.name.en}): ${sets} sets of ${reps} reps${e.holdSeconds ? `, hold ${e.holdSeconds} seconds each rep` : ""}, rest ${e.restSeconds} seconds. How: ${e.instructions[lang]} Movement words: "${e.tempo[lang]}".`;
+const describeItem = (e: Exercise, sets: number, reps: number, lang: Lang, i: number, p: Patient) =>
+  `${i + 1}. ${e.name[lang]} (${e.name.en}): ${sets} sets of ${reps} reps${e.holdSeconds ? `, hold ${e.holdSeconds} seconds each rep` : ""}, rest ${e.restSeconds} seconds. How: ${howTo(e, lang, p.profile)} Movement words: "${e.tempo[lang]}".`;
 
 /** `context` is what the coach remembers (`coachContext`). */
 export function buildInstruction(p: Patient, o: CoachOptions, context: string) {
@@ -37,7 +40,7 @@ export function buildInstruction(p: Patient, o: CoachOptions, context: string) {
   const items = p.plan.items
     .map((it, i) => {
       const e = exerciseById(it.exerciseId);
-      return e ? describeItem(e, it.sets, it.reps, lang, i) : null;
+      return e ? describeItem(e, it.sets, it.reps, lang, i, p) : null;
     })
     .filter(Boolean)
     .join("\n");
@@ -49,19 +52,22 @@ export function buildInstruction(p: Patient, o: CoachOptions, context: string) {
       : []),
     "Explain the first exercise in one or two short sentences and ask if they are ready.",
     'When they are ready, call start_set with the set number, then say "start" in their language.',
+    ...(o.support === "helper"
+      ? ["Someone is with the patient to help. Greet them too. You may ask the helper to stay close and keep a hand near, but the patient does the movement themselves."]
+      : ["The patient is on their own and may be too far away to read the screen: say everything that matters out loud."]),
     counting[o.mode],
     "The app runs the rest timers between sets and between exercises. After a set, wait for a message starting with [APP] before going on. When it announces the next exercise, explain that exercise briefly first.",
     "After the last exercise, ask for their pain now (0 to 10) and call record_pain with when=after. Ask whether it felt easy, OK or hard and call finish_session. Close with one encouraging sentence.",
   ];
 
-  return `You are Langkah, a friendly voice coach guiding one home exercise session for ${p.name}, ${p.age}, after a lower-limb amputation. You are an AI coach, not a doctor or physiotherapist.
+  return `You are Langkah, a friendly voice coach guiding one home exercise session for ${p.name}, ${p.age}, after an amputation. You are an AI coach, not a doctor or physiotherapist.
 
-${language[lang]} ${SIMPLE} Keep each turn to one or two short sentences.
+${language[lang]} ${SIMPLE} Keep each turn to one or two short sentences. After you ask a question, stop and wait for the answer: never answer for the patient, never assume what they said, and if you did not hear an answer, ask again gently. You cannot see the patient: never say their position or movement is right unless an [APP] message says so.
 
 About the patient, entered by their doctor: ${describeProfile(p.profile)}
 Name the side when you explain, for example "your left leg", instead of "the amputated leg". Never ask about their amputation details; the doctor already recorded them. Respect any restrictions.
 
-Today's plan (version ${p.plan.version}), set by the physiotherapist. Do the exercises in this order and never change them:
+Today's plan (version ${p.plan.version}), set by the physiotherapist, done ${schedule(p.plan).perDay} time(s) a day, ${schedule(p.plan).daysPerWeek} day(s) a week. Do the exercises in this order and never change them:
 ${items}${p.plan.note ? `\nNote from the physiotherapist: ${p.plan.note}` : ""}
 
 What you remember about this patient from earlier sessions and the care team. Use it to personalise and encourage, for example mention their goal once. Never invent other facts about them:

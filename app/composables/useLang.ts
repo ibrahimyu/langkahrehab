@@ -33,3 +33,13 @@ export function useT() {
 export function useDataVersion() {
   return useState("data-version", () => 0);
 }
+
+/** "Once a day, every day" for a plan, in the app language. */
+export function useScheduleText() {
+  const T = useT();
+  return (p: { perDay?: number; daysPerWeek?: number }) => {
+    const per = p.perDay ?? 1;
+    const days = p.daysPerWeek ?? 7;
+    return `${T("schedTimesDay", { n: per })}, ${days === 7 ? T("schedEveryDay") : T("schedNDays", { n: days })}`;
+  };
+}

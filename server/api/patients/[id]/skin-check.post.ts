@@ -1,3 +1,4 @@
+import { limbEnglish, limbsOf } from "#shared/limbs";
 import { SKIN_SIGNS, URGENCY, describeProfile, newId, pickLang, type SkinCheck, type SkinResult } from "#shared/model";
 import { addAlerts, afterSkinCheck } from "#shared/rules";
 
@@ -23,14 +24,17 @@ function parseResult(raw: any): SkinResult {
 // contact_soon / urgent results raise an alert for the care team.
 export default defineEventHandler(async (event) => {
   const { ws, id, iso, patient } = await patientContext(event);
+  assertCan(actorFrom(event), "skin.check");
   rateLimit(event, ws, "skin", 20, 60 * 60 * 1000);
+  await aiBudget(event, "skin");
   const body = (await readBody(event).catch(() => ({}))) ?? {};
   const image = typeof body.image === "string" ? body.image : "";
   if (!image || image.length > MAX_IMAGE || !/^[A-Za-z0-9+/=]+$/.test(image.slice(0, 200))) throw bad("Send one JPEG image under 2 MB.");
   const lang = pickLang(body.lang ?? patient.lang);
   const area = body.area === "other_foot" ? "other_foot" : "residual_limb";
   const p = patient.profile;
-  const target = area === "other_foot" ? `the ${p.side === "left" ? "right" : "left"} foot (the leg without amputation)` : `the amputated ${p.side} leg (residual limb)`;
+  const own = limbsOf(p)[0];
+  const target = area === "other_foot" ? `the ${p.side === "left" ? "right" : "left"} foot (the leg without amputation)` : own ? `the residual limb: ${limbEnglish(own)}` : `the ${p.side} leg`;
 
   let result: SkinResult;
   try {

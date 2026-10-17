@@ -22,17 +22,20 @@ export type Settings = {
   askDiary: boolean;
   voice: string;
   poseModel: "lite" | "full";
+  /** On my own (everything spoken) or with a helper (tips on screen for them too). */
+  support: "alone" | "helper";
 };
 
 export const VOICES = ["Aoede", "Kore", "Leda", "Zephyr", "Puck", "Charon", "Orus", "Fenrir"];
 
 export const defaultSettings: Settings = {
   mode: "camera",
-  turn: { kind: "app", silenceMs: 700, inSetSilenceMs: 3000, threshold: 0.02, endSensitivity: "default" },
+  turn: { kind: "app", silenceMs: 1300, inSetSilenceMs: 3000, threshold: 0.02, endSensitivity: "default" },
   bargeIn: true,
   askDiary: true,
   voice: "Aoede",
   poseModel: "full",
+  support: "alone",
 };
 
 const int = (v: unknown, min: number, max: number, fallback: number) => {
@@ -52,7 +55,8 @@ export function parseSettings(input: unknown): Settings {
     mode: pick(s.mode, ["camera", "patient", "coach"] as const, d.mode),
     turn: {
       kind: pick(t.kind, ["auto", "app"] as const, d.turn.kind),
-      silenceMs: int(t.silenceMs, 200, 5000, d.turn.silenceMs),
+      // People who are tired or in pain pause mid-sentence: never end a turn after less than a second.
+      silenceMs: int(t.silenceMs, 1000, 5000, d.turn.silenceMs),
       inSetSilenceMs: int(t.inSetSilenceMs, 500, 10000, d.turn.inSetSilenceMs),
       threshold: Number.isFinite(threshold) ? Math.min(0.3, Math.max(0.002, threshold)) : d.turn.threshold,
       endSensitivity: pick(t.endSensitivity, ["default", "low", "high"] as const, d.turn.endSensitivity),
@@ -61,5 +65,6 @@ export function parseSettings(input: unknown): Settings {
     askDiary: typeof s.askDiary === "boolean" ? s.askDiary : d.askDiary,
     voice: pick(s.voice, VOICES, d.voice),
     poseModel: pick(s.poseModel, ["lite", "full"] as const, d.poseModel),
+    support: pick(s.support, ["alone", "helper"] as const, d.support),
   };
 }
