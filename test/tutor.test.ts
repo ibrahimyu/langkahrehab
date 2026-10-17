@@ -15,3 +15,14 @@ test("every exercise has five filled chapters in every language", () => {
       }
     }
 });
+
+test("mistakes come as what to avoid and what to do instead; movement has its tempo", () => {
+  const e = exercises.find((x) => x.id === "bridging")!;
+  const steps = tutorSteps(e, "en", { level: "below_knee", side: "left" });
+  const m = steps.find((s) => s.chapter === "mistakes")!.mistakes!;
+  assert.deepEqual(m[0], { wrong: "Holding your breath.", right: "Breathe out as you move." });
+  const move = steps.find((s) => s.chapter === "move")!;
+  assert.deepEqual(move.tempo, ["lift", "hold", "lower"]);
+  assert.equal(move.holdSeconds, 3);
+  assert.ok(move.steps!.length >= 1);
+});

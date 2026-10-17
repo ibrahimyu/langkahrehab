@@ -6,6 +6,6 @@ onMounted(() => (role.value = "patient"));
 
 <template>
   <PatientShell :patient-id="id">
-      <PatientHome :patient-id="id" variant="home" @start="navigateTo(`/patient/${id}/session`)" @skin="navigateTo(`/patient/${id}/skin`)" />
+      <PatientHome :patient-id="id" variant="home" @start="navigateTo(`/patient/${id}/exercise`)" @skin="navigateTo(`/patient/${id}/skin`)" />
   </PatientShell>
 </template>
