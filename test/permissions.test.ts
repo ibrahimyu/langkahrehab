@@ -33,6 +33,8 @@ test("a physio handles physio alerts; the doctor handles any alert", () => {
 test("only the patient talks with Langkah", () => {
   assert.equal(can("patient", "talk.use"), true);
   for (const r of ["family", "physio", "doctor"] as const) assert.equal(can(r, "talk.use"), false);
+  assert.equal(can("family", "familyTalk.use"), true);
+  for (const r of ["patient", "physio", "doctor"] as const) assert.equal(can(r, "familyTalk.use"), false);
 });
 
 test("family: tasks, questions and letters are theirs; clinical data stays with the care team", () => {

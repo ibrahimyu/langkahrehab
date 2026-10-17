@@ -5,8 +5,8 @@ import { getFirestore } from "firebase-admin/firestore";
 // SYS-02: cost guard for every Gemini call. Per IP per hour per task (on top of the per-workspace
 // limits), and one global daily count shared by all instances (Firestore) so new anonymous
 // visitors cannot reset it.
-export type AiTask = "live" | "brief" | "skin" | "talk" | "family" | "proposal" | "triage" | "intake" | "navigator";
-const PER_IP_HOUR: Record<AiTask, number> = { live: 6, brief: 20, skin: 15, talk: 120, family: 20, proposal: 30, triage: 30, intake: 10, navigator: 20 };
+export type AiTask = "live" | "brief" | "skin" | "talk" | "family" | "proposal" | "triage" | "intake" | "navigator" | "familyTalk";
+const PER_IP_HOUR: Record<AiTask, number> = { live: 6, brief: 20, skin: 15, talk: 120, family: 20, proposal: 30, triage: 30, intake: 10, navigator: 20, familyTalk: 120 };
 const HOUR = 3_600_000;
 
 export const budgetDay = (ms = Date.now()) => new Date(ms).toISOString().slice(0, 10);

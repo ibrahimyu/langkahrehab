@@ -26,6 +26,7 @@ export const ACTIONS = [
   "note.review",
   "prefs.edit",
   "talk.use",
+  "familyTalk.use",
   "family.edit",
   "familyTask.do",
   "familyTask.edit",
@@ -69,6 +70,8 @@ const matrix: Record<Action, Role[]> = {
   "prefs.edit": ["patient"],
   // Talk with Langkah is the patient's own space; the care team sees only the notes it produces.
   "talk.use": ["patient"],
+  // The family's own companion: a space for the caregiver, never read by the patient or the clinic.
+  "familyTalk.use": ["family"],
   // Family (KEL): the patient, the family and the physio may keep the family list up to date.
   "family.edit": ["patient", "family", "physio"],
   "familyTask.do": ["family"],
