@@ -30,5 +30,13 @@ export function useReadAloud() {
     u.rate = 0.95;
     speechSynthesis.speak(u);
   }
-  return { speaking, supported, toggle, speak };
+  /** Adds a short cue after whatever is being said (for counting a hold). */
+  function queue(text: string) {
+    if (!supported.value || !text) return;
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = locale(lang.value);
+    u.rate = 0.9;
+    speechSynthesis.speak(u);
+  }
+  return { speaking, supported, toggle, speak, queue };
 }

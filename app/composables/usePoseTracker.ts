@@ -25,6 +25,8 @@ export function usePoseTracker(els: {
   overlay: Ref<HTMLCanvasElement | null>;
   chart: Ref<HTMLCanvasElement | null>;
   onRep?: (e: RepEvent) => void;
+  /** The movement reached the top (start of the hold). */
+  onTop?: () => void;
 }) {
   const state = ref<TrackerState>("idle");
   const error = ref("");
@@ -159,6 +161,7 @@ export function usePoseTracker(els: {
     if (counting.value) {
       const e = counter.push(smooth, now);
       if (counter.atTop !== atTop.value || !lastMove.value) lastMove.value = now;
+      if (counter.atTop && !atTop.value) els.onTop?.();
       atTop.value = counter.atTop;
       if (e) {
         e.form = scoreRep(e, { up: counter.up, down: counter.down, holdMs: counter.holdMs });

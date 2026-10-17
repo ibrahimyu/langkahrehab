@@ -13,7 +13,7 @@ const props = defineProps<{
   /** Show the live angle and its last 10 seconds, for checking how the measurement behaves. */
   analysis?: boolean;
 }>();
-const emit = defineEmits<{ rep: [e: RepEvent] }>();
+const emit = defineEmits<{ rep: [e: RepEvent]; top: [] }>();
 const T = useT();
 
 const video = ref<HTMLVideoElement | null>(null);
@@ -21,7 +21,7 @@ const overlay = ref<HTMLCanvasElement | null>(null);
 const chart = ref<HTMLCanvasElement | null>(null);
 
 const t = computed(() => tracking(props.exerciseId, props.limb));
-const tracker = usePoseTracker({ video, overlay, chart, onRep: (e) => emit("rep", e) });
+const tracker = usePoseTracker({ video, overlay, chart, onRep: (e) => emit("rep", e), onTop: () => emit("top") });
 
 watch([t, () => props.holdSeconds], () => tracker.configure(t.value, props.holdSeconds * 1000), { immediate: true });
 watch(() => props.counting, (on) => (tracker.counting.value = on), { immediate: true });
@@ -38,7 +38,7 @@ const framing = computed(() => {
 });
 const ready = computed(() => tracker.state.value === "running" && !!t.value && !framing.value);
 
-defineExpose({ reset: tracker.reset, start: () => tracker.start(props.model), stop: tracker.stop, lastMove: tracker.lastMove, ready, trackable: computed(() => !!t.value && !t.value.unsupported) });
+defineExpose({ framing, reset: tracker.reset, start: () => tracker.start(props.model), stop: tracker.stop, lastMove: tracker.lastMove, ready, trackable: computed(() => !!t.value && !t.value.unsupported) });
 </script>
 
 <template>
