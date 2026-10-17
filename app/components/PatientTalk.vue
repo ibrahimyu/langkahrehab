@@ -16,8 +16,9 @@ const T = useT();
 const lang = useLang();
 const toast = useToast();
 
-type Bubble = { role: "user" | "model"; text: string; safeKey?: ReplyIssue | null; shared?: Note[]; proposals?: { p: Proposal; state: "ask" | "done" | "no" }[]; redFlag?: boolean; card?: RecoveryTopic | null };
-type TalkResponse = { mode: "reply" | "crisis" | "red_flag"; reply: string; safeKey?: ReplyIssue | null; notes: Note[]; saved: Note[]; proposals: Proposal[]; card?: RecoveryTopic | null };
+type Offer = { kind: Note["kind"]; quote: string; summary: string; state?: "ask" | "sent" | "no"; noteId?: string };
+type Bubble = { role: "user" | "model"; text: string; safeKey?: ReplyIssue | null; shared?: Note[]; offers?: Offer[]; proposals?: { p: Proposal; state: "ask" | "done" | "no" }[]; redFlag?: boolean; card?: RecoveryTopic | null };
+type TalkResponse = { mode: "reply" | "crisis" | "red_flag"; reply: string; safeKey?: ReplyIssue | null; notes: Note[]; saved: Note[]; offers?: Offer[]; proposals: Proposal[]; card?: RecoveryTopic | null };
 
 const patient = ref<Patient | null>(null);
 const loadError = ref("");
@@ -134,6 +135,7 @@ async function send(text = draft.value, via: "text" | "voice" = "text") {
         safeKey: r.safeKey ?? null,
         redFlag: r.mode === "red_flag",
         shared: r.saved,
+        offers: r.offers?.length ? r.offers.map((o) => ({ ...o, state: "ask" as const })) : undefined,
         proposals: r.proposals.map((p) => ({ p, state: "ask" as const })),
         card: r.card ?? null,
       });
@@ -194,6 +196,25 @@ const voiceState = computed(() => (voice.state.value === "connecting" ? "connect
 watch(voice.state, (st) => {
   if (st === "error" || st === "ended") voiceOn.value = false;
 });
+
+// ---- Something for the care team: sent only when the patient says so (Undo takes it back) ----
+async function sendOffer(o: Offer) {
+  try {
+    const r = await api<{ note: Note; notes: Note[] }>(`/api/patients/${props.patientId}/notes`, { method: "POST", body: { kind: o.kind, quote: o.quote, summary: o.summary, source: "companion", via: "text" } });
+    if (patient.value) patient.value.notes = r.notes;
+    o.state = "sent";
+    o.noteId = r.note.id;
+    toast.show(T("offerSent"), {
+      tone: "good",
+      undo: async () => {
+        await api(`/api/patients/${props.patientId}/notes/${r.note.id}`, { method: "DELETE" });
+        o.state = "ask";
+      },
+    });
+  } catch (e) {
+    toast.show(errorMessage(e), { tone: "bad" });
+  }
+}
 
 // ---- Proposed changes: confirm, then undo from the toast ----
 const proposalText = (p: Proposal) =>
@@ -283,6 +304,14 @@ async function accept(item: { p: Proposal; state: string }) {
           <div class="bubble" :class="{ flag: b.redFlag }">
             <p v-if="b.redFlag" class="with-ic"><ShieldAlert class="ic" aria-hidden="true" /> {{ T("talkRedFlag") }}</p>
             <p v-else>{{ b.text || (b.safeKey ? T(`talkSafe_${b.safeKey}` as TextKey) : "") }}</p>
+          </div>
+          <div v-for="(o, j) in b.offers ?? []" :key="`o${j}`" class="card propose">
+            <p>{{ T(o.kind === "question" ? "offerQuestion" : "offerNote", { text: o.quote }) }}</p>
+            <div v-if="o.state === 'ask'" class="controls">
+              <button class="primary" @click="sendOffer(o)"><Send class="ic" aria-hidden="true" /> {{ T("offerYes") }}</button>
+              <button class="ghost" @click="o.state = 'no'"><X class="ic" aria-hidden="true" /> {{ T("offerNo") }}</button>
+            </div>
+            <p v-else-if="o.state === 'sent'" class="good-text with-ic"><Check class="ic" aria-hidden="true" /> {{ T("offerSent") }}</p>
           </div>
           <div v-for="(item, j) in b.proposals ?? []" :key="j" class="card propose">
             <p>{{ T(`propose_${item.p.tool}` as TextKey, { text: proposalText(item.p) }) }}</p>

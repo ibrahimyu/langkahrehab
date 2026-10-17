@@ -1,10 +1,11 @@
 import { TALK_MAX_TURNS, TALK_SESSIONS_PER_DAY, companionSchema, parseCompanion, screenReply, type TalkMessage } from "#shared/companion";
 import { DAY, describeProfile, pickLang, str } from "#shared/model";
 import { detectRedFlags } from "#shared/redflags";
-import { mergeNotes, quoteFound } from "#shared/noteFilter";
+import { quoteFound } from "#shared/noteFilter";
 import { addAlerts, makeAlert } from "#shared/rules";
 
-// Talk with Langkah (AI-09, PAS-19). The transcript is not stored: only notes and confirmed changes are.
+// Talk with Langkah (AI-09, PAS-19). The transcript is not stored. Nothing the patient says goes to
+// the care team unless they confirm it on the screen; only danger signs are passed on at once.
 // Danger words never reach the model: the safety net answers with the fixed crisis screen (SYS-01).
 export default defineEventHandler(async (event) => {
   const { ws, id, iso, patient: p } = await patientContext(event);
@@ -74,15 +75,10 @@ export default defineEventHandler(async (event) => {
   const turn = parseCompanion(raw);
   // Rules on the reply: a reply that breaks a hard limit is replaced by fixed text on the screen.
   const issue = screenReply(turn.reply);
-  // AI-10: a quote must be the patient's own words from this conversation, and urgency comes from rules.
+  // AI-10: a quote must be the patient's own words from this conversation. These are offers only:
+  // the patient decides on the screen whether each one goes to the care team.
   const said = [text, ...history.filter((m) => m.role === "user").map((m) => m.text)];
-  const saved = turn.notes
-    .filter((n) => quoteFound(n.quote, said))
-    .map((n) =>
-      buildNote({ kind: n.kind, quote: n.quote, summary: n.summary, urgency: detectRedFlags(n.quote, lang) ? "now" : n.kind === "complaint" || n.kind === "worry" ? "watch" : "normal", source: "companion", via, at: iso }),
-    );
-  if (issue === "medicine" || issue === "diagnosis") saved.push(buildNote({ kind: "question", quote: text, summary: "Asked in Talk with Langkah; needs a clinician's answer.", urgency: "normal", source: "companion", via, at: iso }));
-  // Said again within 7 days → one note with a count, not a new one (AI-10).
-  const notes = saved.length ? (await updatePatient(ws, id, (q) => void (q.notes = mergeNotes(q.notes, saved, Date.parse(iso)).notes))).notes : p.notes;
-  return { mode: "reply", flag: null, reply: issue ? "" : turn.reply || "…", safeKey: issue, notes, saved, proposals: turn.proposals, card: issue ? null : turn.card };
+  const offers = turn.notes.filter((n) => quoteFound(n.quote, said));
+  if (issue === "medicine" || issue === "diagnosis") offers.push({ kind: "question", quote: text, summary: "Asked in Talk with Langkah; needs a clinician's answer." });
+  return { mode: "reply", flag: null, reply: issue ? "" : turn.reply || "…", safeKey: issue, notes: p.notes, saved: [], offers, proposals: turn.proposals, card: issue ? null : turn.card };
 });

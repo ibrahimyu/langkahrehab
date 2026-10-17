@@ -9,7 +9,7 @@ const tools = [
     functionDeclarations: [
       {
         name: "share_with_team",
-        description: "Save something the care team must act on, in the patient's own words. Only for a new or changed body complaint, a concrete need, a request or question for the doctor or physio, a changed goal, or a major life event. Never for small talk or feelings you already answered.",
+        description: "Pass something on to the care team, in the patient's own words. Only after you asked the patient whether they want it passed on and they said yes. Only for a body complaint, a concrete need, a request or question for the doctor or physio, a changed goal, or a major life event.",
         parameters: {
           type: "OBJECT",
           properties: {
