@@ -22,6 +22,8 @@ export type Settings = {
   askDiary: boolean;
   voice: string;
   poseModel: "lite" | "full";
+  /** On my own (everything spoken) or with a helper (tips on screen for them too). */
+  support: "alone" | "helper";
 };
 
 export const VOICES = ["Aoede", "Kore", "Leda", "Zephyr", "Puck", "Charon", "Orus", "Fenrir"];
@@ -33,6 +35,7 @@ export const defaultSettings: Settings = {
   askDiary: true,
   voice: "Aoede",
   poseModel: "full",
+  support: "alone",
 };
 
 const int = (v: unknown, min: number, max: number, fallback: number) => {
@@ -61,5 +64,6 @@ export function parseSettings(input: unknown): Settings {
     askDiary: typeof s.askDiary === "boolean" ? s.askDiary : d.askDiary,
     voice: pick(s.voice, VOICES, d.voice),
     poseModel: pick(s.poseModel, ["lite", "full"] as const, d.poseModel),
+    support: pick(s.support, ["alone", "helper"] as const, d.support),
   };
 }

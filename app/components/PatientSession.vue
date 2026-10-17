@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { CircleAlert, Minus, Pause, Play, Plus, Settings2 } from "lucide-vue-next";
+import { holdLines, repLine } from "#shared/cues";
 import { exerciseById } from "#shared/exercises";
 import { formBand, mainTip, average } from "#shared/form";
 import type { TextKey } from "#shared/i18n";
@@ -106,7 +107,7 @@ watch(coach.state, (st) => {
 });
 
 // ---- Camera ----
-type TrackerApi = { reset: () => void; start: () => Promise<void>; stop: () => void; lastMove: number; ready: boolean };
+type TrackerApi = { reset: () => void; start: () => Promise<void>; stop: () => void; lastMove: number; ready: boolean; framing: string | null };
 const tracker = ref<TrackerApi | null>(null);
 const item = computed(() => (session.value ? currentItem(session.value) : null));
 const shownExercise = computed(() => item.value?.exercise ?? planItems.value[0]?.exercise);
@@ -117,9 +118,9 @@ const trackable = computed(() => {
 });
 const useCamera = computed(() => settings.mode === "camera");
 const cueWords = { hold_longer: "hold a little longer at the top", slow_down: "move a little more slowly", go_further: "go a little further if it feels OK" } as const;
-const cueTip = { hold_longer: "formTip_hold", slow_down: "formTip_pace", go_further: "formTip_range" } as const;
 let lastCueAt = 0;
 let targetSent = false;
+let lastCorrection: number | null = null;
 const lastRep = ref<RepEvent | null>(null);
 
 function onRep(e: RepEvent) {
@@ -132,8 +133,11 @@ function onRep(e: RepEvent) {
   const target = currentItem(s).reps;
   const cueDue = e.cue && Date.now() - lastCueAt > CUE_GAP_MS;
   if (cueDue) lastCueAt = Date.now();
+  const line = repLine(e, target, currentItem(s).exercise.id, lang.value, lastCorrection);
+  if (line.corrected) lastCorrection = e.count;
   if (engine.value === "guide") {
-    voice.speak(cueDue && e.cue && e.count < target ? `${e.count}. ${T(cueTip[e.cue])}` : String(e.count));
+    clearHold();
+    voice.speak(line.text);
     if (e.count >= target && !targetSent) {
       targetSent = true;
       setTimeout(() => session.value?.phase === "set" && finishSet(), 1200);
@@ -146,9 +150,39 @@ function onRep(e: RepEvent) {
     coach.say(`[APP] The camera counted ${e.count} reps, the target for this set. Call log_set now.`);
     return;
   }
-  coach.addContext(`[APP] Camera: rep ${e.count} of ${target}, form ${e.form?.score ?? "–"}/100.`);
-  if (cueDue && e.cue) coach.say(`[APP] Camera cue: tell the patient to ${cueWords[e.cue]}, in a few words.`);
+  // The coach speaks after every rep, like a physio next to them: praise, or the one correction.
+  const fix = line.corrected && e.cue ? ` Correction: tell them to ${cueWords[e.cue]}.` : line.corrected && e.form?.weakest === "range" ? ` Correction: tell them to ${cueWords.go_further}.` : " Good rep: short praise.";
+  coach.say(`[APP] Camera: rep ${e.count} of ${target}, form ${e.form?.score ?? "–"}/100.${fix}`);
 }
+
+// ---- Spoken hold at the top (app guide): "Hold it. 1, 2, 3. And down slowly." ----
+let holdTimers: ReturnType<typeof setTimeout>[] = [];
+function clearHold() {
+  holdTimers.forEach(clearTimeout);
+  holdTimers = [];
+}
+function onTop() {
+  const s = session.value;
+  if (!s || s.phase !== "set" || paused.value || engine.value !== "guide") return;
+  const lines = holdLines(currentItem(s).exercise.holdSeconds, lang.value);
+  clearHold();
+  lines.forEach((text, i) => holdTimers.push(setTimeout(() => (i === 0 ? voice.speak(text) : voice.queue(text)), i * 1000)));
+}
+onBeforeUnmount(clearHold);
+
+// ---- Say it when the camera loses the patient (they may be too far to read the screen) ----
+let lastFramingSaid = 0;
+watch(
+  () => tracker.value?.framing,
+  (f) => {
+    const s = session.value;
+    if (!f || !s || paused.value || (s.phase !== "set" && s.phase !== "ready")) return;
+    if (Date.now() - lastFramingSaid < 12_000) return;
+    lastFramingSaid = Date.now();
+    if (engine.value === "guide") voice.speak(T("cueCantSee"));
+    else if (live.value) coach.say("[APP] The camera cannot see the patient well. Ask them, in a few words, to move the phone back a little.");
+  },
+);
 
 watch(
   () => session.value?.phase,
@@ -157,6 +191,7 @@ watch(
     if (p === "set") {
       tracker.value?.reset();
       lastCueAt = 0;
+      lastCorrection = null;
       targetSent = false;
       idleWarned = false;
       lastRep.value = null;
@@ -211,7 +246,35 @@ function finishSet() {
   if (s.phase !== "set") return;
   const reps = s.mode === "camera" && trackable.value ? currentLog(s).camera ?? 0 : manualReps.value;
   applyTool(s, "log_set", { set: s.current, reps }, Date.now());
-  if ((s.phase as Session["phase"]) === "rest") voice.speak(T("sayRest", { n: Math.round(((s.restUntil ?? Date.now()) - Date.now()) / 1000) }));
+  clearHold();
+  if ((s.phase as Session["phase"]) === "rest") {
+    feel.value = "ask";
+    voice.speak(`${T("sayRest", { n: Math.round(((s.restUntil ?? Date.now()) - Date.now()) / 1000) })} ${T("cueHowFelt")}`);
+  }
+}
+
+// ---- How did that set feel? (app guide) ----
+const feel = ref<"ask" | "hurts" | null>(null);
+function felt(answer: "fine" | "hard" | "hurts") {
+  const s = session.value;
+  if (answer === "fine") {
+    feel.value = null;
+    voice.speak(T("feltFineSay"));
+  } else if (answer === "hard") {
+    feel.value = null;
+    if (s?.restUntil) s.restUntil += 15_000;
+    voice.speak(T("feltHardSay"));
+  } else {
+    feel.value = "hurts";
+    voice.speak(T("feltHurtsAsk"));
+  }
+}
+function hurtsWorse(worse: boolean) {
+  feel.value = null;
+  if (worse) return feelWrong();
+  const s = session.value;
+  if (s?.restUntil) s.restUntil += 15_000;
+  voice.speak(T("feltHardSay"));
 }
 function painAfter(n: number) {
   applyTool(session.value!, "record_pain", { when: "after", score: n }, Date.now());
@@ -432,6 +495,13 @@ const DIFFS: Difficulty[] = ["easy", "ok", "hard"];
         </li>
       </ul>
       <p v-if="trackable && useCamera" class="hint">{{ T(`camPlace_${shownExercise!.id}` as TextKey) }}</p>
+      <div class="field">
+        <span>{{ T("sesSupport") }}</span>
+        <div class="seg seg-full" role="group" :aria-label="T('sesSupport')">
+          <button v-for="x in (['alone', 'helper'] as const)" :key="x" :class="{ on: settings.support === x }" @click="settings.support = x">{{ T(`support_${x}`) }}</button>
+        </div>
+        <span class="hint">{{ settings.support === "alone" ? T("supportAloneHint") : T("supportHelperHint") }}</span>
+      </div>
       <p class="hint">{{ T("sesCoachHint") }}</p>
       <button class="primary big-btn pill-btn" @click="ask(true)">{{ T("sesWithCoach") }}</button>
       <button class="link ses-center" @click="ask(false)">{{ T("sesQuiet") }}</button>
@@ -460,6 +530,7 @@ const DIFFS: Difficulty[] = ["easy", "ok", "hard"];
           :counting="session.phase === 'set' && !paused"
           :model="settings.poseModel"
         @rep="onRep"
+          @top="onTop"
         />
         <MediaFrame v-else-if="shownExercise" kind="video" :src="`/media/exercises/${shownExercise.id}.mp4`" :label="T('video')" />
 
@@ -481,6 +552,7 @@ const DIFFS: Difficulty[] = ["easy", "ok", "hard"];
           <div class="tile-big">{{ T("setOf", { n: session.current, m: item.sets }) }}</div>
           <p class="on-night-2">{{ T("setsReps", { sets: 1, reps: item.reps }) }} · {{ item.exercise.tempo[lang] }}</p>
           <ExerciseVideoButton :exercise-id="item.exercise.id" :level="patient.profile.level" />
+          <p v-if="settings.support === 'helper'" class="helper-tip">{{ T("helperTip") }}</p>
           <button class="primary big-btn pill-btn" @click="startSet">{{ T("sesStartSet", { n: session.current }) }}</button>
         </div>
         <!-- Coach engine: waiting for the coach -->
@@ -494,7 +566,22 @@ const DIFFS: Difficulty[] = ["easy", "ok", "hard"];
           <ProgressRing :value="(restLeft / restTotal) * 100" />
           <div class="ring-num">{{ restLeft }}</div>
           <b>{{ T("rest") }}</b>
-          <button class="ghost pill-btn" @click="skipRest">{{ T("skip") }}</button>
+          <div v-if="engine === 'guide' && feel === 'ask'" class="feel">
+            <b class="imm-q">{{ T("cueHowFelt") }}</b>
+            <div class="diff-row">
+              <button class="ghost pill-btn" @click="felt('fine')">{{ T("feltFine") }}</button>
+              <button class="ghost pill-btn" @click="felt('hard')">{{ T("feltHard") }}</button>
+              <button class="ghost pill-btn" @click="felt('hurts')">{{ T("feltHurts") }}</button>
+            </div>
+          </div>
+          <div v-else-if="engine === 'guide' && feel === 'hurts'" class="feel">
+            <b class="imm-q">{{ T("feltHurtsAsk") }}</b>
+            <div class="diff-row two">
+              <button class="ghost pill-btn" @click="hurtsWorse(true)">{{ T("feltHurtsYes") }}</button>
+              <button class="ghost pill-btn" @click="hurtsWorse(false)">{{ T("feltHurtsNo") }}</button>
+            </div>
+          </div>
+          <button v-else class="ghost pill-btn" @click="skipRest">{{ T("skip") }}</button>
         </div>
         <!-- Guide engine: after -->
         <div v-else-if="engine === 'guide' && session.phase === 'after'" class="imm-center imm-panel">
@@ -597,5 +684,8 @@ const DIFFS: Difficulty[] = ["easy", "ok", "hard"];
 .mic-level { height: 3px; margin-top: 8px; border-radius: 2px; background: var(--night-line); overflow: hidden; }
 .mic-level i { display: block; height: 100%; background: var(--dawn); transition: width 80ms linear; }
 .voice-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+.feel { display: grid; gap: 10px; justify-items: center; width: 100%; }
+.diff-row.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.helper-tip { margin: 0; max-width: 360px; padding: 10px 12px; border-radius: 12px; background: var(--night-raised); color: var(--on-night); font-size: 0.9375rem; text-align: left; }
 .voice-grid .on { background: var(--ink); color: var(--surface); }
 </style>

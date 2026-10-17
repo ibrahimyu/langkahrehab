@@ -75,5 +75,5 @@ test("adherence and coach instructions", () => {
   assert.match(text, /1\. Angkat pinggul/);
   assert.match(text, /2\. Angkat kaki ke samping/);
   assert.match(text, /walk to the mosque/);
-  assert.match(text, /The camera counts the reps/);
+  assert.match(text, /The camera counts and checks every rep/);
 });

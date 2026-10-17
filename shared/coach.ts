@@ -8,6 +8,8 @@ export type CoachOptions = {
   mode: CountMode;
   /** Ask about phantom limb pain once per session and log it in the diary. */
   askDiary: boolean;
+  /** Someone is with the patient: the coach may speak to them too. */
+  support?: "alone" | "helper";
 };
 
 const language: Record<Lang, string> = {
@@ -21,7 +23,7 @@ const SIMPLE =
 
 const counting: Record<CountMode, string> = {
   camera:
-    'The camera counts the reps. While a set is in progress, stay silent. You will receive [APP] messages: "Camera: rep N" (do not reply to these), camera cues such as "hold longer" (say the cue in a few words, then stay silent again), and a message when the target is reached. When the set ends (target reached, or the patient says they are done or cannot continue), call log_set; the app uses the camera\'s count. Then confirm the count in a few words.',
+    'The camera counts and checks every rep. During a set, coach like a physio standing next to them, in very few words. For each "[APP] Camera: rep N" message say at most five words: the number, then either short praise ("yes, just like that") or the correction the message gives, in the words of that exercise ("lift your hips a little higher"). Never invent a correction the message does not give. If a message says the camera cannot see them, ask them to move the phone back. When the target is reached you get a message; then call log_set (the app uses the camera\'s count), confirm the count in a few words, and ask in one short question how that set felt. Listen to the answer: if it hurts more than usual, ask once more and call report_concern if needed; if it felt hard, tell them to go slowly on the next set.',
   patient:
     'The patient counts each rep aloud. While a set is in progress, stay completely silent: do not repeat the numbers, do not encourage, do not acknowledge anything. The set ends when the patient says they are done (for example "done", "selesai", "sudah", "好了"), reaches the target, or asks you something. Then call log_set with the last number the patient said and confirm the count in a few words.',
   coach:
@@ -49,12 +51,15 @@ export function buildInstruction(p: Patient, o: CoachOptions, context: string) {
       : []),
     "Explain the first exercise in one or two short sentences and ask if they are ready.",
     'When they are ready, call start_set with the set number, then say "start" in their language.',
+    ...(o.support === "helper"
+      ? ["Someone is with the patient to help. Greet them too. You may ask the helper to stay close and keep a hand near, but the patient does the movement themselves."]
+      : ["The patient is on their own and may be too far away to read the screen: say everything that matters out loud."]),
     counting[o.mode],
     "The app runs the rest timers between sets and between exercises. After a set, wait for a message starting with [APP] before going on. When it announces the next exercise, explain that exercise briefly first.",
     "After the last exercise, ask for their pain now (0 to 10) and call record_pain with when=after. Ask whether it felt easy, OK or hard and call finish_session. Close with one encouraging sentence.",
   ];
 
-  return `You are Langkah, a friendly voice coach guiding one home exercise session for ${p.name}, ${p.age}, after a lower-limb amputation. You are an AI coach, not a doctor or physiotherapist.
+  return `You are Langkah, a friendly voice coach guiding one home exercise session for ${p.name}, ${p.age}, after an amputation. You are an AI coach, not a doctor or physiotherapist.
 
 ${language[lang]} ${SIMPLE} Keep each turn to one or two short sentences.
 

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ArrowLeft, ArrowRight, Camera, ExternalLink, Gauge, Play, RotateCcw } from "lucide-vue-next";
+import { holdLines, repLine } from "#shared/cues";
 import { exerciseById } from "#shared/exercises";
 import { average, formBand, type RepScore } from "#shared/form";
 import type { TextKey } from "#shared/i18n";
@@ -61,11 +62,22 @@ const tracker = ref<{ start: () => Promise<void>; stop: () => void; reset: () =>
 const reps = ref<RepScore[]>([]);
 const events = ref<RepEvent[]>([]);
 const analysis = ref(false);
+// Spoken coaching while practising: the phone may be on the floor, out of reach of the eyes.
+const voice = useReadAloud();
+let lastCorrection: number | null = null;
+let holdTimers: ReturnType<typeof setTimeout>[] = [];
+const clearHold = () => (holdTimers.forEach(clearTimeout), (holdTimers = []));
+onBeforeUnmount(clearHold);
+function onTop() {
+  clearHold();
+  holdLines(exercise.value?.holdSeconds ?? 0, lang.value).forEach((text, i) => holdTimers.push(setTimeout(() => (i === 0 ? voice.speak(text) : voice.queue(text)), i * 1000)));
+}
 const last = computed(() => reps.value.at(-1) ?? null);
 const avg = computed(() => average(reps.value.map((r) => r.score)));
 async function startPractice() {
   reps.value = [];
   events.value = [];
+  lastCorrection = null;
   practising.value = true;
   await nextTick();
   await tracker.value?.start();
@@ -77,6 +89,10 @@ function stopPractice() {
 function onRep(e: RepEvent) {
   if (e.form) reps.value = [...reps.value, e.form];
   events.value = [...events.value, { ...e }];
+  clearHold();
+  const line = repLine(e, planItem.value?.reps ?? exercise.value?.reps ?? 10, props.exerciseId, lang.value, lastCorrection);
+  if (line.corrected) lastCorrection = e.count;
+  voice.speak(line.text);
 }
 </script>
 
@@ -139,7 +155,7 @@ function onRep(e: RepEvent) {
           <p class="hint">{{ T("tutPracticeHint") }}</p>
           <p class="hint">{{ T(`camPlace_${exerciseId}` as TextKey) }}</p>
           <div v-if="practising" class="tut-cam">
-            <PoseTracker ref="tracker" :exercise-id="exerciseId" :limb="limbOf(patient.profile)" :hold-seconds="exercise.holdSeconds" :counting="true" model="full" :analysis="analysis" @rep="onRep" />
+            <PoseTracker ref="tracker" :exercise-id="exerciseId" :limb="limbOf(patient.profile)" :hold-seconds="exercise.holdSeconds" :counting="true" model="full" :analysis="analysis" @rep="onRep" @top="onTop" />
             <div class="tut-score glass">
               <b class="tut-count">{{ reps.length }}</b>
               <span v-if="last">{{ T("formRep", { n: reps.length }) }} · <b>{{ last.score }}</b></span>

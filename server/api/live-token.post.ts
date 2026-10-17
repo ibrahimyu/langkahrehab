@@ -16,7 +16,7 @@ export default defineEventHandler(async (event) => {
   const settings = parseSettings(body.settings);
   // The coach speaks the language chosen in the app (the patient's own setting in a real product).
   patient.lang = pickLang(body.lang ?? patient.lang);
-  const instruction = buildInstruction(patient, { mode: settings.mode, askDiary: settings.askDiary }, coachContext(patient));
+  const instruction = buildInstruction(patient, { mode: settings.mode, askDiary: settings.askDiary, support: settings.support }, coachContext(patient));
   const config = liveConfig(settings, instruction, coachTools);
   const model = useRuntimeConfig().liveModel;
   const now = Date.now();
