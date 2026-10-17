@@ -27,6 +27,8 @@ export function useApi(role?: MaybeRefOrGetter<Role>) {
     const token = await $idToken();
     const headers: Record<string, string> = token ? { authorization: `Bearer ${token}` } : { "x-workspace": localWorkspace() };
     headers["x-langkah-role"] = toValue(role) ?? current.value;
+    const account = useState<{ id: string } | null>("session-account").value;
+    if (account?.id) headers["x-langkah-account"] = account.id;
     return (await plainFetch(path, { method: options.method, body: options.body, headers })) as T;
   };
 }

@@ -18,6 +18,8 @@ const text = {
   settings: { en: "Settings", id: "Pengaturan", zh: "设置" },
   rolePatient: { en: "Patient", id: "Pasien", zh: "患者" },
   rolePhysio: { en: "Physio", id: "Fisioterapis", zh: "物理治疗师" },
+  roleAdmin: { en: "Admin", id: "Admin", zh: "管理员" },
+  roleDoAdmin: { en: "Manage people and patients", id: "Kelola akun dan pasien", zh: "管理人员和患者" },
   roleDoctor: { en: "Doctor", id: "Dokter", zh: "医生" },
   roleFamily: { en: "Family", id: "Keluarga", zh: "家属" },
   signInTitle: { en: "Sign in to Langkah", id: "Masuk ke Langkah", zh: "登录 Langkah" },

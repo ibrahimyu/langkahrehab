@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Component } from "vue";
-import { ArrowRight, ChevronRight, HeartPulse, Stethoscope, UserRound, Users } from "lucide-vue-next";
-import { accounts, type Account } from "#shared/accounts";
+import { ArrowRight, ChevronRight, HeartPulse, ShieldCheck, Stethoscope, UserRound, Users } from "lucide-vue-next";
+import type { Account } from "#shared/accounts";
 import type { TextKey } from "#shared/i18n";
 import { ROLES, type Role } from "#shared/model";
 
@@ -9,15 +9,18 @@ import { ROLES, type Role } from "#shared/model";
 const T = useT();
 const route = useRoute();
 const { account, signIn } = useSession();
+const accounts = useAccounts();
+onMounted(accounts.load);
 
 const looks: Record<Role, { icon: Component; role: TextKey; does: TextKey }> = {
   patient: { icon: UserRound, role: "rolePatient", does: "roleDoPatient" },
   family: { icon: Users, role: "roleFamily", does: "roleDoFamily" },
   physio: { icon: HeartPulse, role: "rolePhysio", does: "roleDoPhysio" },
   doctor: { icon: Stethoscope, role: "roleDoctor", does: "roleDoDoctor" },
+  admin: { icon: ShieldCheck, role: "roleAdmin", does: "roleDoAdmin" },
 };
 const role = ref<Role>(account.value?.role ?? "patient");
-const list = computed(() => accounts.filter((a) => a.role === role.value && a.ready));
+const list = computed(() => accounts.list.value.filter((a) => a.role === role.value && a.active));
 const next = computed(() => (typeof route.query.next === "string" ? route.query.next : undefined));
 const open = (a: Account) => signIn(a, next.value);
 const initials = (name: string) => name.replace(/^(Pak|Bu|Ibu|Mas|dr\.)\s+/i, "").slice(0, 1).toUpperCase();
@@ -71,6 +74,8 @@ const initials = (name: string) => name.replace(/^(Pak|Bu|Ibu|Mas|dr\.)\s+/i, ""
 .role-family .role-ic { background: var(--dawn-soft); color: var(--role-family); }
 .role-physio .role-ic { background: var(--info-soft); color: var(--role-physio); }
 .role-doctor .role-ic { color: var(--role-doctor); }
+.role-admin { grid-column: 1 / -1; min-height: 0; }
+.role-admin .role-ic { color: var(--ink-2); }
 .role-does { font-size: 0.875rem; color: var(--ink-2); }
 .acct-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .acct { width: 100%; display: flex; gap: 12px; align-items: center; min-height: 64px; padding: 10px 14px; border-radius: var(--r-card); border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-align: left; cursor: pointer; transition: transform var(--dur-press) var(--ease-out); }

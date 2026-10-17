@@ -70,7 +70,7 @@ const route = useRoute();
 const inApp = computed(() => route.path.startsWith("/patient/"));
 const base = computed(() => `/patient/${props.patientId}`);
 const sheet = ref<"plan" | "pain" | null>(null);
-const roleKey = { patient: "rolePatient", physio: "rolePhysio", doctor: "roleDoctor", family: "roleFamily" } as const;
+const roleKey = { patient: "rolePatient", physio: "rolePhysio", doctor: "roleDoctor", family: "roleFamily", admin: "roleAdmin" } as const;
 const mainGoal = computed(() => p.value?.goals.find((g) => g.main)?.text ?? goal.value);
 const painList = computed(() => [...(p.value?.sessions ?? [])].reverse().slice(0, 14));
 

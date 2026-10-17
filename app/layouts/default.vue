@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Component } from "vue";
-import { HeartPulse, LogOut, Menu, Stethoscope, UserRound, Users } from "lucide-vue-next";
+import { HeartPulse, LogOut, Menu, ShieldCheck, Stethoscope, UserRound, Users } from "lucide-vue-next";
 import { homeFor } from "#shared/accounts";
 import type { Lang } from "#shared/exercises";
 import type { TextKey } from "#shared/i18n";
@@ -21,11 +21,12 @@ const roleLook: Record<Role, { key: TextKey; icon: Component }> = {
   family: { key: "roleFamily", icon: Users },
   physio: { key: "rolePhysio", icon: HeartPulse },
   doctor: { key: "roleDoctor", icon: Stethoscope },
+  admin: { key: "roleAdmin", icon: ShieldCheck },
 };
 // Phone header keeps only brand, language and "More"; everything else lives in the sheet (Hick's law).
 const menuOpen = ref(false);
 watch(() => route.fullPath, () => (menuOpen.value = false));
-const inAccount = computed(() => !!account.value && /^\/(patient|care|family)/.test(route.path));
+const inAccount = computed(() => !!account.value && /^\/(patient|care|family|admin)/.test(route.path));
 const look = computed(() => (account.value ? roleLook[account.value.role] : null));
 const showSignIn = computed(() => !inAccount.value && route.path !== "/signin");
 // Keep <html lang> in step with the chosen language (screen readers, and Chinese line spacing).
