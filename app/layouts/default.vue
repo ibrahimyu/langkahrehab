@@ -24,9 +24,11 @@ const roleLook: Record<Role, { key: TextKey; icon: Component }> = {
   admin: { key: "roleAdmin", icon: ShieldCheck },
 };
 // Phone header keeps only brand, language and "More"; everything else lives in the sheet (Hick's law).
-const menuOpen = ref(false);
+const menuOpen = useState("menu-open", () => false);
 watch(() => route.fullPath, () => (menuOpen.value = false));
 const inAccount = computed(() => !!account.value && /^\/(patient|care|family|admin)/.test(route.path));
+// UXA-01: clinicians get their own places (CareNav): a bottom bar on a phone, a rail on a laptop.
+const careArea = computed(() => inAccount.value && (account.value?.role === "physio" || account.value?.role === "doctor") && route.path.startsWith("/care"));
 const look = computed(() => (account.value ? roleLook[account.value.role] : null));
 const showSignIn = computed(() => !inAccount.value && route.path !== "/signin");
 // Keep <html lang> in step with the chosen language (screen readers, and Chinese line spacing).
@@ -44,7 +46,7 @@ watch(lang, (l) => (document.documentElement.lang = l), { immediate: true });
             <button v-for="l in langs" :key="l.id" :class="{ on: lang === l.id }" @click="setLang(l.id)">{{ l.label }}</button>
           </div>
           <NuxtLink v-if="showSignIn" :to="account ? homeFor(account) : '/signin'" class="primary small-btn">{{ account ? T("continueAs", { name: account.name }) : T("lpSignIn") }}</NuxtLink>
-          <button class="ghost small-btn" :class="{ 'phone-only': !inAccount }" :aria-label="T('more')" @click="menuOpen = true"><Menu class="ic" aria-hidden="true" /><span class="wide-only">{{ T("more") }}</span></button>
+          <button class="ghost small-btn" :class="{ 'phone-only': !inAccount, 'wide-only': careArea }" :aria-label="T('more')" @click="menuOpen = true"><Menu class="ic" aria-hidden="true" /><span class="wide-only">{{ T("more") }}</span></button>
         </div>
       </div>
     </header>
@@ -67,9 +69,21 @@ watch(lang, (l) => (document.documentElement.lang = l), { immediate: true });
       </section>
     </UiSheet>
 
-    <main class="page">
-      <slot />
-    </main>
+    <div :class="{ 'care-frame': careArea }">
+      <CareNav v-if="careArea" />
+      <main class="page" :class="{ 'care-main': careArea }">
+        <slot />
+      </main>
+    </div>
     <UiToaster />
   </div>
 </template>
+
+<style scoped>
+/* Room for the care team's bottom bar on a phone; a rail column from 1024 px. */
+.care-main { padding-bottom: calc(104px + env(safe-area-inset-bottom)); }
+@media (min-width: 1024px) {
+  .care-frame { display: grid; grid-template-columns: 88px minmax(0, 1fr); max-width: 1328px; margin: 0 auto; align-items: start; }
+  .care-main { padding-bottom: 4.5rem; margin: 0; max-width: none; }
+}
+</style>
