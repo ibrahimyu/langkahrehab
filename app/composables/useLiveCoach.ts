@@ -1,5 +1,6 @@
 import type { Settings } from "#shared/settings";
 import { EnergyVad, rms } from "#shared/vad";
+import { isEcho } from "#shared/echo";
 
 type Wire = Record<string, any>;
 export type LiveState = "idle" | "connecting" | "listening" | "speaking" | "ended" | "error";
@@ -126,9 +127,16 @@ export function useLiveCoach(handlers: {
     state.value = "speaking";
   };
 
+  /** The coach's last words, to recognise its own voice in the input transcript (GAP-VIDEO #3). */
+  let coachRecent = "";
   const flush = () => {
-    if (input.trim()) lines.value.push({ role: "patient", text: input.trim() });
-    if (output.trim()) lines.value.push({ role: "coach", text: output.trim() });
+    const heard = input.trim();
+    if (heard && !isEcho(heard, `${coachRecent} ${output}`)) lines.value.push({ role: "patient", text: heard });
+    else if (heard) note("echo-dropped", heard);
+    if (output.trim()) {
+      lines.value.push({ role: "coach", text: output.trim() });
+      coachRecent = `${coachRecent} ${output}`.slice(-600);
+    }
     input = output = "";
   };
 
@@ -163,7 +171,8 @@ export function useLiveCoach(handlers: {
     }
     if (c.inputTranscription?.text) {
       input += c.inputTranscription.text;
-      handlers.onInput?.(c.inputTranscription.text);
+      // Echo of the coach is not the patient: do not count it, check it for red flags or caption it.
+      if (!isEcho(input, `${coachRecent} ${output}`)) handlers.onInput?.(c.inputTranscription.text);
       note("heard", c.inputTranscription.text);
     }
     if (c.outputTranscription?.text) {
