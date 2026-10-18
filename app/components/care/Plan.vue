@@ -195,7 +195,7 @@ function changeText(c: PlanChange) {
     <!-- Versions -->
     <h2 class="cr-h">{{ T("crVersions") }}</h2>
     <ul class="cr-list">
-      <li v-for="v in versions" :key="v.version" class="card cr-item cr-version">
+      <li v-for="v in versions" :id="`plan-v${v.version}`" :key="v.version" class="card cr-item cr-version">
         <div class="cr-top">
           <span><b>v{{ v.version }}</b> <span class="cr-meta">· {{ day(v.updatedAt) }} · {{ roleName(v.updatedBy) }} · {{ T(`crSource_${v.source ?? "manual"}` as TextKey) }}</span></span>
           <button v-if="diffFor(v)" class="ghost small-btn" :aria-expanded="comparing === v.version" :class="{ 'cr-on': comparing === v.version }" @click="comparing = comparing === v.version ? null : v.version">
@@ -244,5 +244,6 @@ function changeText(c: PlanChange) {
 .cr-diff { padding: 12px; border-radius: 12px; background: var(--info-soft); color: var(--info-ink); display: grid; gap: 4px; }
 .cr-diff ul, .cr-diff-list { margin: 0; padding-left: 18px; display: grid; gap: 2px; }
 .cr-diff-list { color: var(--ink-2); }
-.cr-version { padding: 12px 14px; }
+.cr-version { padding: 12px 14px; scroll-margin-top: 64px; }
+.cr-version:target { box-shadow: var(--ring); }
 </style>

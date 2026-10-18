@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeft, Check, CircleAlert, FileText, Pill, Plus, Save, Sparkles, Trash2, UserPlus } from "lucide-vue-next";
+import { ArrowLeft, CalendarCheck, Check, ChevronRight, CircleAlert, ClipboardList, FileText, Pill, Plus, Save, Sparkles, Trash2, UserPlus, UserRound, Users } from "lucide-vue-next";
 import type { TextKey } from "#shared/i18n";
 import { CONFIDENT, INTAKE_FIELDS, INTAKE_LEVELS, SEXES, SIDES, missingRequired, type Intake, type IntakeField, type IntakeResult } from "#shared/intake";
 import { LEVEL_NAMES, type LimbLevel } from "#shared/limbs";
@@ -106,10 +106,12 @@ const dateText = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString(lan
     <section v-else-if="result" class="card ik-done">
       <span class="ik-done-ic"><Check class="ic" aria-hidden="true" /></span>
       <h1>{{ T("ikDone", { name: String(values.patientName ?? "") }) }}</h1>
-      <ul>
-        <li>{{ T("ikDonePlan", { v: result.planVersion }) }}</li>
-        <li>{{ T("ikDoneTasks", { n: result.tasks, f: result.family }) }}</li>
-        <li v-if="result.checkIn">{{ T("ikDoneVisit", { date: dateText(result.checkIn) }) }}</li>
+      <p class="cr-meta">{{ T("ikMade") }}</p>
+      <ul class="ik-made">
+        <li><NuxtLink :to="`/care/${result.patientId}?tab=profile`" class="ik-made-row"><UserRound class="ic" aria-hidden="true" /> <span>{{ T("ikMadeProfile") }}</span><ChevronRight class="ic go" aria-hidden="true" /></NuxtLink></li>
+        <li><NuxtLink :to="`/care/${result.patientId}?tab=plan#plan-v${result.planVersion}`" class="ik-made-row"><ClipboardList class="ic" aria-hidden="true" /> <span>{{ T("ikLinkPlan", { v: result.planVersion }) }}</span><ChevronRight class="ic go" aria-hidden="true" /></NuxtLink></li>
+        <li><NuxtLink :to="`/care/${result.patientId}?tab=family#family-tasks`" class="ik-made-row"><Users class="ic" aria-hidden="true" /> <span>{{ T("ikLinkFamily", { n: result.tasks }) }}</span><ChevronRight class="ic go" aria-hidden="true" /></NuxtLink></li>
+        <li v-if="result.checkIn"><NuxtLink :to="`/care/${result.patientId}`" class="ik-made-row"><CalendarCheck class="ic" aria-hidden="true" /> <span>{{ T("ikLinkVisit", { date: dateText(result.checkIn) }) }}</span><ChevronRight class="ic go" aria-hidden="true" /></NuxtLink></li>
       </ul>
       <NuxtLink :to="`/care/${result.patientId}`" class="primary big-btn">{{ T("ikOpenPatient") }}</NuxtLink>
     </section>
@@ -168,7 +170,7 @@ const dateText = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString(lan
         <p v-if="!tasks.length" class="cr-meta">{{ T("ikNotRead") }}</p>
         <label v-for="(x, i) in tasks" :key="i" class="ik-task" :class="{ off: !x.selected }">
           <input v-model="x.selected" type="checkbox" />
-          <span><input v-model="x.title" class="ik-task-title" maxlength="120" :aria-label="T('famTaskTitle')" /><span class="cr-meta">{{ x.detail }}</span></span>
+          <span><textarea v-model="x.title" class="ik-task-title" rows="1" maxlength="120" :aria-label="T('famTaskTitle')" @keydown.enter.prevent /><span class="cr-meta">{{ x.detail }}</span></span>
         </label>
         <p v-if="tasks.length" class="cr-meta">{{ T("ikTasksNote") }}</p>
       </section>
@@ -214,13 +216,21 @@ const dateText = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString(lan
 .ik-explain textarea { width: 100%; }
 .ik-task { display: flex; gap: 10px; align-items: flex-start; padding: 10px; border-radius: 12px; background: var(--sunken); cursor: pointer; }
 .ik-task.off { opacity: 0.6; }
-.ik-task > input { margin-top: 6px; }
-.ik-task > span { display: grid; gap: 2px; flex: 1; min-width: 0; }
-.ik-task-title { width: 100%; font-weight: 600; background: transparent; border: 0; padding: 2px 0; }
+.ik-task > input { width: 22px; height: 22px; flex: none; margin: 4px 0 0; }
+.ik-task > span { display: grid; gap: 2px; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.ik-task-title { width: 100%; min-width: 0; min-height: 32px; font-weight: 600; line-height: 1.4; background: transparent; border: 0; padding: 2px 0; resize: none; field-sizing: content; }
 .ik-member { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 10px; border-radius: 12px; background: var(--sunken); }
 .ik-member > input { grid-column: 1 / -1; }
 .ik-actions { display: grid; gap: 8px; }
 .ik-done { display: grid; gap: 12px; justify-items: start; }
 .ik-done-ic { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 50%; background: var(--pine); color: var(--surface); }
-.ik-done ul { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; }
+.ik-done h1 { margin: 0; }
+.ik-done > p { margin: 0; }
+.ik-made { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; width: 100%; }
+.ik-made-row { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 12px 14px; border-radius: 14px; background: var(--canvas); color: var(--ink); text-decoration: none; font-weight: 600; transition: background-color var(--dur-fast) var(--ease-out), transform var(--dur-press) var(--ease-out); }
+.ik-made-row:hover { background: var(--pine-soft); }
+.ik-made-row:active { transform: scale(0.99); }
+.ik-made-row > span { flex: 1; min-width: 0; }
+.ik-made-row .ic { flex: none; color: var(--pine); }
+.ik-made-row .go { color: var(--ink-3); }
 </style>

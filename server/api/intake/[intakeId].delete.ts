@@ -9,7 +9,7 @@ export default defineEventHandler(async (event) => {
   await deleteIntake(ws, intake.id);
   if (getQuery(event).letter === "dismiss" && intake.patientId && intake.letterId) {
     await updatePatient(ws, intake.patientId, (p) => {
-      p.letters = p.letters.map((l) => (l.id === intake.letterId ? { ...l, status: "reviewed" as const, image: "" } : l));
+      p.letters = p.letters.map((l) => (l.id === intake.letterId ? { ...l, status: "reviewed" as const, image: "", pages: [] } : l));
     });
   }
   return { ok: true };

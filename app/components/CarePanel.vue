@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Lock, Sparkles, TriangleAlert } from "lucide-vue-next";
+import { Lock, Sparkles } from "lucide-vue-next";
 import { LANG_NAMES, LANGS, exercises, exerciseById, type Lang } from "#shared/exercises";
 import { locale, profileText, type TextKey } from "#shared/i18n";
 import { can } from "#shared/permissions";
@@ -55,19 +55,6 @@ const day = (iso: string) => new Date(iso).toLocaleDateString(locale(lang.value)
 const openAlerts = computed(() => (p.value?.alerts ?? []).filter((a) => !a.resolvedAt).sort(bySeverity));
 const resolve = (alertId: string) => act(() => api(`/api/patients/${props.patientId}/alerts/${alertId}`, { method: "PATCH", body: { role: role.value } }));
 
-// What the AI did: memories and diary entries from the coach, skin checks, and alerts.
-const activity = computed(() => {
-  const pt = p.value;
-  if (!pt) return [];
-  const items = [
-    ...pt.memories.filter((m) => m.source === "coach").map((m) => ({ id: m.id, at: m.createdAt, title: T("actRemembered"), detail: m.text, alert: false })),
-    ...pt.diary.filter((d) => d.source === "coach").map((d) => ({ id: d.id, at: d.at, title: T("actDiary", { kind: d.kind === "phantom_pain" ? T("phantom") : T("mood"), n: d.score ?? "–" }), detail: d.note || "", alert: false })),
-    ...pt.skinChecks.map((c) => ({ id: c.id, at: c.at, title: T("actSkin"), detail: T(`urgency_${c.result.urgency}` as TextKey), alert: false })),
-    ...pt.alerts.map((a) => ({ id: a.id, at: a.at, title: T("actAlert"), detail: T(`kind_${a.kind}` as TextKey), alert: true })),
-  ];
-  return items.sort((a, b) => b.at.localeCompare(a.at)).slice(0, 6);
-});
-
 // Pain chart
 const painSeries = computed(() => (p.value?.sessions ?? []).filter((s) => s.painAfter !== null).slice(-10));
 
@@ -113,9 +100,6 @@ async function savePlan() {
   } else planError.value = error.value;
 }
 
-// Check-ins
-const visitNotes = reactive<Record<string, string>>({});
-const updateCheckIn = (cid: string, body: Record<string, unknown>) => act(() => api(`/api/patients/${props.patientId}/checkins/${cid}`, { method: "PATCH", body }));
 const setsDone = (s: Patient["sessions"][number]) => `${s.exercises.reduce((n, e) => n + e.logged.filter((v) => v !== null).length, 0)}/${s.exercises.reduce((n, e) => n + e.sets, 0)}`;
 </script>
 
@@ -149,14 +133,8 @@ const setsDone = (s: Patient["sessions"][number]) => `${s.exercises.reduce((n, e
     </section>
 
     <section class="tile">
-      <span class="tile-label"><Sparkles class="ic" aria-hidden="true" /> {{ T("aiActivity") }}</span>
-      <ul class="activity">
-        <li v-for="a in activity" :key="a.id">
-          <span class="dot" :class="{ alert: a.alert }"><TriangleAlert v-if="a.alert" class="ic" aria-hidden="true" /><Sparkles v-else class="ic" aria-hidden="true" /></span>
-          <span><b>{{ a.title }}</b><br /><span class="hint">{{ a.detail }} · {{ day(a.at) }}</span></span>
-        </li>
-        <li v-if="!activity.length" class="hint">{{ T("noActivity") }}</li>
-      </ul>
+      <span class="tile-label"><Sparkles class="ic" aria-hidden="true" /> {{ T("crTab_activity") }}</span>
+      <CareActivity :patient="p" compact />
     </section>
 
     <section v-if="!bare" class="tile">
@@ -169,21 +147,9 @@ const setsDone = (s: Patient["sessions"][number]) => `${s.exercises.reduce((n, e
       </div>
     </section>
 
-  <section v-if="!compact || p.checkIns.length" class="tile wide">
-        <span class="tile-label">{{ T("checkIns") }}</span>
-        <ul class="checkins">
-          <li v-for="c in [...p.checkIns].reverse()" :key="c.id">
-            <span><b>{{ day(c.requestedAt) }}</b> · {{ roleName(c.requestedBy) }} · <i>{{ T(`status_${c.status}` as TextKey) }}</i><span v-if="c.reason" class="hint"> · “{{ c.reason }}”</span></span>
-            <div v-if="c.status !== 'done'" class="add">
-              <input v-model="visitNotes[c.id]" :placeholder="T('visitNote')" />
-              <button v-if="c.status === 'requested'" class="ghost" @click="updateCheckIn(c.id, { status: 'scheduled' })">{{ T("schedule") }}</button>
-              <button class="primary" @click="updateCheckIn(c.id, { status: 'done', visitNote: visitNotes[c.id] ?? '' })">{{ T("visitDone") }}</button>
-            </div>
-            <p v-else-if="c.visitNote" class="hint">{{ c.visitNote }}</p>
-          </li>
-          <li v-if="!p.checkIns.length" class="hint">{{ T("noCheckIns") }}</li>
-        </ul>
-      </section>
+    <section v-if="!compact || p.checkIns.length" class="tile wide">
+      <CareCheckIns :patient="p" :role="role" :compact="compact" @patch="(x) => p && Object.assign(p, x)" />
+    </section>
 
     <section class="tile wide">
       <div class="bar">
