@@ -1,6 +1,7 @@
 import { logActivity } from "#shared/activity";
 import { pick, REJECT_REASONS, str, type Plan, type ProposalChange } from "#shared/model";
 import { PROG } from "#shared/progression";
+import { resolveProposalAlerts } from "#shared/daily";
 
 // FIS-06: the physio decides. Approve (as proposed, or after editing the numbers) saves a new plan
 // version with source "proposal"; reject needs a reason; reopen undoes a reject while the plan is unchanged.
@@ -16,7 +17,7 @@ export default defineEventHandler(async (event) => {
     if (!x) throw createError({ statusCode: 404, statusMessage: "Proposal not found." });
     const ref = { kind: "proposal" as const, id: x.id, label: `Proposal for plan v${x.basedOnPlanVersion}` };
     const closeAlert = () => {
-      for (const a of p.alerts) if (a.kind === "proposal_pending" && !a.resolvedAt) Object.assign(a, { resolvedAt: iso, resolvedBy: "physio" });
+      resolveProposalAlerts(p, iso, actorFrom(event).role === "doctor" ? "doctor" : "physio");
     };
 
     if (decision === "reopen") {

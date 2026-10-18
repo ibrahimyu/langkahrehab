@@ -41,7 +41,7 @@ export function mergeNotes(existing: Note[], incoming: Note[], now: number): { n
   const merged: Note[] = [];
   const rank = { normal: 0, watch: 1, now: 2 } as const;
   for (const n of incoming) {
-    const twin = [...notes].reverse().find((o) => !o.private && o.kind === n.kind && now - Date.parse(o.lastMentionedAt ?? o.at) < 7 * DAY && similarity(o, n) >= SIMILAR);
+    const twin = [...notes].reverse().find((o) => !o.private && !o.clinicianOnly === !n.clinicianOnly && o.kind === n.kind && now - Date.parse(o.lastMentionedAt ?? o.at) < 7 * DAY && similarity(o, n) >= SIMILAR);
     if (twin) {
       twin.mentions = (twin.mentions ?? 1) + 1;
       twin.lastMentionedAt = n.at;

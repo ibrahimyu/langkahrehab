@@ -41,6 +41,9 @@ export const ACTIONS = [
   "intake.review",
   "readiness.edit",
   "readiness.clear",
+  "notify.view",
+  "notify.settings",
+  "question.answer",
 ] as const;
 export type Action = (typeof ACTIONS)[number];
 
@@ -95,6 +98,11 @@ const matrix: Record<Action, Role[]> = {
   "intake.review": ["doctor"],
   "readiness.edit": CARE,
   "readiness.clear": ["doctor"],
+  // SYS-11: everyone except the clinic office has an inbox and their own reminder settings.
+  "notify.view": ALL,
+  "notify.settings": ALL,
+  // DOK-05: at the visit the care team marks a patient or family question answered, with its answer.
+  "question.answer": CARE,
 };
 
 /** Rules that depend on the object, on top of the table. */
@@ -110,4 +118,6 @@ export const PLAN_LIMIT_FIELDS = ["painThreshold", "reviewDate"] as const;
 export const PLAN_EXERCISE_FIELDS = ["items", "note"] as const;
 
 /** Notes a role may see (PAS-18): a note the patient made private is for the patient only. */
-export const notesFor = (role: Role, notes: Note[]) => (role === "patient" ? notes : notes.filter((n) => !n.private));
+/** Patients see their own notes (hidden ones too) but never the quiet clinician-only notes from Talk. */
+export const notesFor = (role: Role, notes: Note[]) =>
+  role === "patient" || role === "family" ? notes.filter((n) => !n.clinicianOnly && (role === "patient" || !n.private)) : notes.filter((n) => !n.private);

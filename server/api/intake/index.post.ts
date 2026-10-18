@@ -1,6 +1,7 @@
 import { newId, pickLang } from "#shared/model";
 import { emptyFields, LETTER_PAGE, sanitizeExtraction, sanitizePages, type Intake } from "#shared/intake";
 import { sampleFields, sampleLetter } from "#shared/sampleLetters";
+import { intakeInstruction, intakeSchema } from "../../utils/intakePrompt";
 
 // AI-03 / DOK-01: reads one discharge letter (photos of each page, or a PDF) into a draft intake for the doctor to review.
 // The photo comes from the doctor's browser, or from a letter the family sent (DOK-07). It is passed

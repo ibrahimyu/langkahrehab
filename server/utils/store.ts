@@ -36,6 +36,13 @@ export async function setWorkspace(ws: string, w: Workspace) {
   else await local().setItem(`ws:${ws}:meta`, w);
 }
 
+/** SYS-03: every workspace id (for the daily cron job). */
+export async function listWorkspaces(): Promise<string[]> {
+  if (useFirestore()) return (await firestore().collection("workspaces").listDocuments()).map((d) => d.id);
+  const keys = await local().getKeys("ws");
+  return [...new Set(keys.filter((k) => k.endsWith(":meta")).map((k) => k.split(":")[1]!).filter(Boolean))];
+}
+
 export async function listPatients(ws: string): Promise<Patient[]> {
   if (useFirestore()) return (await patientsCol(ws).get()).docs.map((d) => withDefaults(d.data() as Patient));
   const keys = await local().getKeys(`ws:${ws}:p`);

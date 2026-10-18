@@ -50,6 +50,7 @@ const pick = (id: string) => {
       <span class="sk sk-card" /><span class="sk sk-line" /><span class="sk sk-line short" />
     </div>
     <slot v-else />
+    <PatientWelcome v-if="view" :patient-id="patientId" role="family" :name="view.name" />
 
     <nav class="tabbar" :aria-label="T('tabsLabel')">
       <NuxtLink v-for="t in tabs" :key="t.key" :to="base + t.to" class="tab" :class="{ on: isOn(t.to) }" :aria-current="isOn(t.to) ? 'page' : undefined">
@@ -94,7 +95,7 @@ const pick = (id: string) => {
 .who-name { display: grid; gap: 2px; }
 .tabbar { position: fixed; left: 50%; bottom: 0; z-index: 40; transform: translateX(-50%); width: min(560px, 100%); display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); padding: 6px 4px calc(10px + env(safe-area-inset-bottom)); background: color-mix(in srgb, var(--surface) 94%, transparent); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-top: 1px solid var(--line); }
 @media (min-width: 600px) { .tabbar { bottom: 12px; border: 0; border-radius: var(--r-sheet); box-shadow: var(--shadow-lg); padding-bottom: 8px; } }
-.tab { display: grid; justify-items: center; gap: 2px; min-width: 0; min-height: 52px; padding-top: 2px; color: var(--ink-3); font-size: 0.6875rem; white-space: nowrap; font-weight: 600; text-decoration: none; transition: color var(--dur-fast) var(--ease-out); }
+.tab { display: grid; justify-items: center; gap: 2px; min-width: 0; min-height: 52px; padding-top: 2px; color: var(--ink-3); font-size: 0.75rem; white-space: nowrap; font-weight: 600; text-decoration: none; transition: color var(--dur-fast) var(--ease-out); }
 .tab:active .tab-ic { transform: scale(0.92); }
 .tab-ic { display: grid; place-items: center; width: 44px; height: 28px; border-radius: var(--r-pill); transition: background-color var(--dur) var(--ease-out), transform var(--dur-press) var(--ease-out); }
 .tab-ic .ic { width: 20px; height: 20px; }

@@ -74,3 +74,18 @@ test("only the physio decides progression proposals", () => {
   assert.equal(can("doctor", "triage.view"), true);
   assert.equal(can("family", "triage.view"), false);
 });
+
+test("everyone but the admin has an inbox and their own notification settings", () => {
+  for (const r of ["patient", "family", "physio", "doctor"] as const) {
+    assert.equal(can(r, "notify.view"), true);
+    assert.equal(can(r, "notify.settings"), true);
+  }
+  assert.equal(can("admin", "notify.view"), false);
+});
+
+test("DOK-05: only the care team answers patient and family questions", () => {
+  assert.equal(can("physio", "question.answer"), true);
+  assert.equal(can("doctor", "question.answer"), true);
+  assert.equal(can("patient", "question.answer"), false);
+  assert.equal(can("family", "question.answer"), false);
+});

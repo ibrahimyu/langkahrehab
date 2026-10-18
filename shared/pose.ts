@@ -28,6 +28,8 @@ export type Tracking = {
   camera: string;
   /** Why this exercise cannot be tracked for this limb, if it cannot. */
   unsupported?: string;
+  /** Count from the lowest value of the last seconds (the resting level), not from zero. */
+  baseline?: boolean;
   /** Landmarks used, as [side, joint]. */
   uses: [Side, Joint][];
   compute: (lm: Landmark[]) => number;
@@ -58,21 +60,22 @@ export function tracking(exerciseId: string, limb: Limb): Tracking | null {
   const amp = limb.side;
   const good = other(amp);
   switch (exerciseId) {
-    case "bridging": {
-      // Hips rise: the shoulder–hip–knee angle opens towards straight. Watched on the amputated leg
-      // (it rests on the towel and moves with the hips); above the knee there is no knee point there,
-      // so the intact leg is watched instead.
-      const leg = limb.level === "above_knee" ? good : amp;
+    case "bridging":
+      // The hips rise off the mat while the shoulders stay down, so the shoulder-to-hip line tilts
+      // upwards. This reads the same whichever knee is bent or rests on the towel, and does not
+      // depend on MediaPipe telling left from right, which it often swaps in a side view.
       return {
-        label: "Hip angle (shoulder–hip–knee)",
-        up: 160,
-        down: 145,
-        range: [100, 185],
+        // Lying flat reads anywhere from about −5° to 10° depending on how the phone is tilted, so
+        // the lift is counted from the resting level (baseline).
+        label: "Hip lift (degrees above resting)",
+        up: 10,
+        down: 4,
+        range: [0, 40],
+        baseline: true,
         camera: "Side view at floor level, about 2 m away, whole body in frame.",
-        uses: [[leg, "shoulder"], [leg, "hip"], [leg, "knee"]],
-        compute: (lm) => angle(pt(lm, leg, "shoulder"), pt(lm, leg, "hip"), pt(lm, leg, "knee")),
+        uses: [[amp, "shoulder"], [amp, "hip"]],
+        compute: (lm) => elevation(pt(lm, amp, "shoulder"), pt(lm, amp, "hip")),
       };
-    }
     case "side-lying-abduction":
       // The top (amputated) leg lifts away from the line of the body: 180° minus the
       // shoulder–hip–knee angle on that side. The other leg moving does not count.

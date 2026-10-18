@@ -272,7 +272,7 @@ export function applyIntake(p: Patient, intake: Intake, now: number): IntakeResu
   if (intake.explanation) p.letterExplanation = { ...intake.explanation, hospital: v<string>(f, "hospital"), confirmedAt: iso };
   p.familyTasks = [...p.familyTasks, ...tasks];
   // The doctor has seen the letter: the photo is dropped, only the reviewed fields stay (DAT-10).
-  p.letters = p.letters.map((l) => (l.id === intake.letterId ? { ...l, status: "reviewed" as const, image: "" } : l));
+  p.letters = p.letters.map((l) => (l.id === intake.letterId ? { ...l, status: "reviewed" as const, image: "", pages: [] } : l));
   const result = { patientId: p.id, planVersion: plan.version, tasks: tasks.length, family: added.length, checkIn, isNew: false };
   intakeEvent(p, iso, result);
   return result;

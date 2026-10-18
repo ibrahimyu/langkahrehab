@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { ExternalLink, Play } from "lucide-vue-next";
 import { exerciseById } from "#shared/exercises";
-import type { Level } from "#shared/pose";
+import type { Level, Side } from "#shared/pose";
+import type { Limb } from "#shared/limbs";
 import type { TextKey } from "#shared/i18n";
 import { embedUrl, thumbnailUrl, videoFor, watchUrl } from "#shared/videos";
 
 // Thumbnail that opens the exercise's how-to video (clinical source) in a sheet.
 // The player loads only after the tap, so the home screen stays light on data.
-const props = defineProps<{ exerciseId: string; level: Level }>();
+const props = defineProps<{ exerciseId: string; level: Level | { level: Level; side: Side; limbs?: Limb[] } }>();
 const lang = useLang();
 const T = useT();
 const open = ref(false);

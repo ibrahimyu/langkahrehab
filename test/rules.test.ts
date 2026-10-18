@@ -76,4 +76,6 @@ test("adherence and coach instructions", () => {
   assert.match(text, /2\. Angkat kaki ke samping/);
   assert.match(text, /jalan sendiri lagi/);
   assert.match(text, /The camera counts and checks every rep/);
+  assert.match(text, /never log_diary/);
+  assert.match(text, /Only the number they give in answer to this question goes to log_diary/);
 });

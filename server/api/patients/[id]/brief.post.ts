@@ -1,6 +1,5 @@
 import { logActivity, WHO_AI } from "#shared/activity";
-import { describeProfile, pickLang } from "#shared/model";
-import { patientStats } from "#shared/stats";
+import { pickLang } from "#shared/model";
 
 // Writes the care team brief from everything stored for the patient.
 export default defineEventHandler(async (event) => {
@@ -9,32 +8,7 @@ export default defineEventHandler(async (event) => {
   rateLimit(event, ws, "brief", 30, 60 * 60 * 1000);
   await aiBudget(event, "brief");
   const lang = pickLang((await readBody(event).catch(() => ({})))?.lang ?? "en");
-  const stats = patientStats(p);
-  const data = {
-    patient: `${p.name}, ${p.age}. ${describeProfile(p.profile)}`,
-    plan: { version: p.plan.version, items: p.plan.items, painThreshold: p.plan.painThreshold, reviewDate: p.plan.reviewDate },
-    stats,
-    sessions: p.sessions.slice(-20).map(({ id, source, lang, ...s }) => s),
-    diary: p.diary.slice(-30).map(({ id, source, ...d }) => d),
-    skinChecks: p.skinChecks.slice(-10).map((c) => ({ at: c.at, area: c.area, urgency: c.result.urgency, findings: c.result.findings, note: c.result.careTeamNote })),
-    openAlerts: p.alerts.filter((a) => !a.resolvedAt).map((a) => ({ at: a.at, kind: a.kind, message: a.message })),
-    memories: p.memories.map((m) => ({ kind: m.kind, text: m.text })),
-    // PAS-18: what the patient told the team, grouped by kind; private notes stay out.
-    notes: p.notes.filter((n) => !n.private).slice(-30).reduce<Record<string, { at: string; quote: string; urgency: string; discussAtVisit: boolean; reply: string }[]>>((g, n) => ((g[n.kind] ??= []).push({ at: n.at, quote: n.quote, urgency: n.urgency, discussAtVisit: n.discussAtVisit, reply: n.reply }), g), {}),
-  };
-
-  let text: string;
-  try {
-    const response = await gemini().models.generateContent({
-      model: useRuntimeConfig().textModel,
-      contents: [{ role: "user", parts: [{ text: `Patient data (JSON):\n${JSON.stringify(data)}` }] }],
-      config: { systemInstruction: briefInstruction(lang), temperature: 0.2, abortSignal: AbortSignal.timeout(45_000) },
-    });
-    text = (response.text ?? "").trim();
-  } catch (e) {
-    throw providerError(e, "Brief failed");
-  }
-  if (!text) throw createError({ statusCode: 502, statusMessage: "The model returned an empty brief." });
+  const { text, stats } = await writeBrief(event, p, lang);
 
   const updated = await updatePatient(ws, id, (q) => {
     q.brief = { text, lang, generatedAt: iso, editedAt: null };

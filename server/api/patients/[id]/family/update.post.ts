@@ -1,3 +1,4 @@
+import { logActivity, WHO_AI, WHO_RULES } from "#shared/activity";
 import { LANG_NAMES } from "#shared/exercises";
 import { locale } from "#shared/i18n";
 import { pickLang } from "#shared/model";
@@ -42,6 +43,7 @@ export default defineEventHandler(async (event) => {
 
   const p = await updatePatient(ws, id, (p) => {
     p.familyUpdate = { text, lang, generatedAt: iso, by };
+    logActivity(p, { at: iso, actor: by === "ai" ? "ai" : "rule", who: by === "ai" ? WHO_AI : WHO_RULES, action: "act_family_update", refs: [{ kind: "plan", id: `family-update-${iso}`, label: "Family update" }] });
   });
   return familyView(p, now);
 });

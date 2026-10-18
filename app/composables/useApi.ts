@@ -29,6 +29,7 @@ export function useApi(role?: MaybeRefOrGetter<Role>) {
     headers["x-langkah-role"] = toValue(role) ?? current.value;
     const account = useState<{ id: string } | null>("session-account").value;
     if (account?.id) headers["x-langkah-account"] = account.id;
+    headers["x-langkah-lang"] = useState<string>("lang").value ?? "en";
     return (await plainFetch(path, { method: options.method, body: options.body, headers })) as T;
   };
 }

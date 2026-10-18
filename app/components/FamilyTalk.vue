@@ -186,11 +186,11 @@ const STARTERS: TextKey[] = ["famTalkStarter1", "famTalkStarter2", "famTalkStart
         <li v-if="sending" class="bubble-row model"><div class="bubble typing">{{ T("talkThinking") }}</div></li>
       </ol>
 
-      <form class="composer" @submit.prevent="send()">
-        <textarea v-model="draft" rows="2" maxlength="600" :placeholder="T('talkPlaceholder')" :aria-label="T('talkPlaceholder')" @keydown.enter.exact.prevent="send()" />
+      <form class="composer composer-row" @submit.prevent="send()">
+        <textarea v-model="draft" rows="1" maxlength="600" :placeholder="T('talkPlaceholder')" :aria-label="T('talkPlaceholder')" @keydown.enter.exact.prevent="send()" />
         <div class="controls">
           <UiMicButton @text="(v) => send(v)" />
-          <button class="primary" :disabled="!draft.trim() || sending"><Send class="ic" aria-hidden="true" /> {{ T("send") }}</button>
+          <button class="round-btn" :disabled="!draft.trim() || sending" :aria-label="T('send')"><Send class="ic" aria-hidden="true" /></button>
         </div>
       </form>
     </template>

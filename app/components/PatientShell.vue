@@ -22,6 +22,7 @@ const isOn = (to: string) => (to ? route.path.startsWith(base.value + to) : rout
 <template>
   <div class="app-col patient-app">
     <slot />
+    <PatientWelcome :patient-id="patientId" />
     <nav class="tabbar" :aria-label="T('tabsLabel')">
       <NuxtLink v-for="t in tabs" :key="t.key" :to="base + t.to" class="tab" :class="{ on: isOn(t.to) }" :aria-current="isOn(t.to) ? 'page' : undefined">
         <span class="tab-ic"><component :is="t.icon" class="ic" aria-hidden="true" /></span>

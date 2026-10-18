@@ -14,7 +14,7 @@ Only include places and programmes you found in the search. Never give medical a
 
 const templateOptions = (lang: ReturnType<typeof pickLang>, city: string): SourceOption[] => [
   { kind: "free", title: t(lang, "navFreeT"), detail: t(lang, "navFreeD"), cost: t(lang, "navFreeC"), url: null },
-  { kind: "borrow", title: t(lang, "navBorrowT"), detail: t(lang, "navBorrowD", { city: city || "—" }), cost: t(lang, "navBorrowC"), url: null },
+  { kind: "borrow", title: t(lang, "navBorrowT"), detail: city ? t(lang, "navBorrowD", { city }) : t(lang, "navBorrowDAny"), cost: t(lang, "navBorrowC"), url: null },
   { kind: "buy", title: t(lang, "navBuyT"), detail: t(lang, "navBuyD"), cost: "", url: null },
 ];
 

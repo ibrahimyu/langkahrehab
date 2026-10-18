@@ -35,11 +35,11 @@ watch(version, load);
 const p = computed(() => data.value?.patient);
 const patch = (part: Partial<Patient>) => p.value && Object.assign(p.value, part);
 
-type Tab = "overview" | "notes" | "plan" | "goals" | "body" | "sessions" | "memories" | "profile";
+type Tab = "overview" | "notes" | "plan" | "goals" | "readiness" | "body" | "sessions" | "family" | "activity" | "memories" | "profile";
 const tabs = computed<Tab[]>(() =>
   role.value === "doctor"
-    ? ["overview", "notes", "profile", "body", "plan", "sessions", "goals", "memories"]
-    : ["overview", "notes", "plan", "goals", "body", "sessions", "memories", "profile"],
+    ? ["overview", "notes", "profile", "readiness", "body", "plan", "sessions", "goals", "family", "activity", "memories"]
+    : ["overview", "notes", "plan", "goals", "readiness", "body", "sessions", "family", "activity", "memories", "profile"],
 );
 const tab = computed<Tab>({
   get: () => (tabs.value.includes(route.query.tab as Tab) ? (route.query.tab as Tab) : "overview"),
@@ -48,6 +48,10 @@ const tab = computed<Tab>({
 // Keep the chosen tab in view inside the scrolling strip (deep links such as ?tab=memories).
 watch(tab, () => nextTick(() => document.querySelector(".cr-tabs .on")?.scrollIntoView({ block: "nearest", inline: "nearest" })), { flush: "post" });
 onMounted(() => setTimeout(() => document.querySelector(".cr-tabs .on")?.scrollIntoView({ block: "nearest", inline: "nearest" }), 600));
+// Links into an object (#plan-v3, #family-tasks) land on it once the tab has rendered.
+watch([() => !!data.value, tab, () => route.hash], ([ready]) => {
+  if (ready && route.hash) nextTick(() => document.querySelector(route.hash)?.scrollIntoView({ block: "center" }));
+}, { flush: "post" });
 const unread = computed(() => (p.value?.notes ?? []).filter((n) => !n.readAt).length);
 const toDiscuss = computed(() => (p.value?.notes ?? []).filter((n) => n.discussAtVisit).length);
 const goalsWaiting = computed(() => (p.value?.goals ?? []).flatMap((g) => g.targets).filter((t) => t.needsPhysioOk && !t.physioOkAt && !t.doneAt).length);
@@ -58,7 +62,7 @@ const lastPain = computed(() => [...(p.value?.sessions ?? [])].reverse().find((s
 
 <template>
   <div class="care-page cr-page">
-    <NuxtLink to="/care" class="link back"><ArrowLeft class="ic" aria-hidden="true" /> {{ T("patients") }}</NuxtLink>
+    <NuxtLink to="/care/patients" class="link back"><ArrowLeft class="ic" aria-hidden="true" /> {{ T("patients") }}</NuxtLink>
     <p v-if="loadError" class="error">{{ loadError }} <button class="link" @click="load">{{ T("tryAgain") }}</button></p>
 
     <template v-if="!p && !loadError">
@@ -92,15 +96,22 @@ const lastPain = computed(() => [...(p.value?.sessions ?? [])].reverse().find((s
             <MessageSquareText class="ic" aria-hidden="true" />
             <span><b>{{ T("crSinceVisit") }}</b><br /><span class="hint">{{ T("crUnreadN", { n: unread }) }} · {{ T("crDiscussN", { n: toDiscuss }) }}</span></span>
           </button>
+          <CareProposal v-if="p.proposals.some((x) => x.status === 'pending')" :patient="p" :role="role" @patch="patch" />
           <CarePanel :patient-id="id" :role="role" bare />
         </template>
         <CareNotes v-else-if="tab === 'notes'" :patient="p" :role="role" @patch="patch" />
-        <CarePlan v-else-if="tab === 'plan'" :patient="p" :role="role" @reload="load" />
+        <template v-else-if="tab === 'plan'">
+          <CareProposal :patient="p" :role="role" @patch="patch" />
+          <CarePlan :patient="p" :role="role" @reload="load" />
+        </template>
         <CareGoals v-else-if="tab === 'goals'" :patient="p" :role="role" @patch="patch" />
         <CareBody v-else-if="tab === 'body'" :patient="p" />
         <CareSessions v-else-if="tab === 'sessions'" :patient="p" />
         <CareMemories v-else-if="tab === 'memories'" :patient="p" :role="role" @patch="patch" />
         <CareProfile v-else-if="tab === 'profile'" :patient="p" :role="role" @patch="patch" @reload="load" />
+        <CareReadiness v-else-if="tab === 'readiness'" :patient="p" :role="role" @patch="patch" />
+        <CareFamily v-else-if="tab === 'family'" :patient="p" />
+        <section v-else-if="tab === 'activity'" class="card"><CareActivity :patient="p" /></section>
       </div>
     </template>
   </div>

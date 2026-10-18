@@ -1,3 +1,4 @@
+import { logActivity, WHO_RULES } from "#shared/activity";
 import { exerciseById, LANGS } from "#shared/exercises";
 import { CONCERNS, newId, pick, score, str, type SessionRecord } from "#shared/model";
 import { addAlerts, afterSession } from "#shared/rules";
@@ -56,7 +57,11 @@ export default defineEventHandler(async (event) => {
     // Checked again inside the transaction: two retries racing each other still make one session.
     if (clientId && p.sessions.some((s) => s.clientId === clientId)) return;
     p.sessions = [...p.sessions, session].slice(-100);
+    // FIS-08: the patient's session, the alerts the rules raised and the next step they chose.
+    const ref = { kind: "session" as const, id: session.id, label: session.at.slice(0, 10) };
+    logActivity(p, { at: session.at, actor: "human", who: "patient", action: "act_session", params: { pain: `${session.painBefore ?? "?"}→${session.painAfter ?? "?"}` }, refs: [ref] });
     addAlerts(p, result.alerts);
+    if (result.nextAction.kind !== "keep_going") logActivity(p, { at: session.at, actor: "rule", who: WHO_RULES, action: "act_next", params: { kind: result.nextAction.kind }, refs: [ref] });
   });
   return { session, alerts: result.alerts };
 });

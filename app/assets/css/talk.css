@@ -39,8 +39,17 @@
 
 .composer { position: sticky; bottom: calc(84px + env(safe-area-inset-bottom)); display: grid; gap: 8px; padding: 12px; border-radius: var(--r-card); background: var(--surface); box-shadow: var(--shadow-md); }
 .composer textarea { resize: none; }
+.composer-row { grid-template-columns: 1fr auto; align-items: end; padding: 8px; }
+.composer-row textarea { min-height: 52px; max-height: 140px; field-sizing: content; border-radius: var(--r-pill); padding: 13px 18px; }
+.composer-row .controls { display: flex; gap: 8px; }
+.round-btn { display: grid; place-items: center; width: 52px; height: 52px; padding: 0; border: 0; border-radius: 50%; background: var(--pine); color: var(--surface); cursor: pointer; transition: transform var(--dur-press) var(--ease-out), opacity var(--dur) var(--ease-out); }
+.round-btn:active { transform: scale(0.94); }
+.round-btn:disabled { opacity: 0.5; cursor: default; }
+.round-btn .ic { width: 24px; height: 24px; }
 
 .crisis { display: grid; gap: 12px; background: var(--dawn-soft); box-shadow: none; }
 .crisis h2 { font-size: 1.375rem; }
 .big-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; }
 .danger-btn { background: var(--danger-ink); color: var(--surface); border: 0; font-weight: 700; }
+.composer-row :deep(.mic) { width: 52px; height: 52px; padding: 0; border-radius: 50%; justify-content: center; }
+.composer-row :deep(.mic span) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

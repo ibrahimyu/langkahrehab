@@ -49,6 +49,7 @@ export function usePoseTracker(els: {
   let counter = new RepCounter(1, 0, 0);
   let smooth: number | null = null;
   let history: { t: number; v: number }[] = [];
+  let rest: { t: number; v: number }[] = [];
   let frames: number[] = [];
 
   function configure(t: Tracking | null, holdMs: number) {
@@ -56,6 +57,7 @@ export function usePoseTracker(els: {
     counter = new RepCounter(t?.up ?? 1, t?.down ?? 0, holdMs);
     smooth = null;
     history = [];
+    rest = [];
     count.value = 0;
     atTop.value = false;
   }
@@ -90,16 +92,43 @@ export function usePoseTracker(els: {
     for (const side of ["left", "right"] as const)
       for (const [joint, i] of Object.entries(idx[side])) if (used.has(`${side}:${joint}`)) usedIdx.add(i);
 
-    ctx.lineWidth = Math.max(2, W / 320);
+    ctx.lineCap = "round";
     for (const { start, end } of connections) {
       const a = lm[start]!;
       const b = lm[end]!;
       const seen = Math.min(a.visibility ?? 0, b.visibility ?? 0) >= 0.5;
-      ctx.strokeStyle = usedIdx.has(start) && usedIdx.has(end) ? "#FFC845" : seen ? "rgba(255,255,255,0.75)" : "rgba(255,255,255,0.2)";
+      const measured = usedIdx.has(start) && usedIdx.has(end);
+      // The measured line is the one that matters: thick, glowing, green at the top of the movement.
+      ctx.lineWidth = measured ? Math.max(5, W / 120) : Math.max(2, W / 320);
+      ctx.shadowBlur = measured ? W / 60 : 0;
+      ctx.shadowColor = measured ? "rgba(255,200,69,0.9)" : "transparent";
+      ctx.strokeStyle = measured ? (atTop.value ? "#7BE0A0" : "#FFC845") : seen ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.15)";
       ctx.beginPath();
       ctx.moveTo(a.x * W, a.y * H);
       ctx.lineTo(b.x * W, b.y * H);
       ctx.stroke();
+    }
+    ctx.shadowBlur = 0;
+    // The live measurement next to the measured joints. The canvas is mirrored on screen, so the text is flipped back.
+    const pts = [...usedIdx].map((i) => lm[i]!).filter((p) => (p.visibility ?? 0) >= 0.5);
+    if (value.value !== null && pts.length) {
+      const x = (pts.reduce((n, p) => n + p.x, 0) / pts.length) * W;
+      const y = Math.min(...pts.map((p) => p.y)) * H - W / 30;
+      const size = Math.round(Math.max(16, W / 22));
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(-1, 1);
+      ctx.font = `700 ${size}px system-ui, sans-serif`;
+      ctx.textAlign = "center";
+      const label = `${value.value}°`;
+      const w = ctx.measureText(label).width + size;
+      ctx.fillStyle = "rgba(15,30,30,0.78)";
+      ctx.beginPath();
+      ctx.roundRect(-w / 2, -size * 1.1, w, size * 1.5, size * 0.75);
+      ctx.fill();
+      ctx.fillStyle = atTop.value ? "#7BE0A0" : "#FFC845";
+      ctx.fillText(label, 0, size * 0.25);
+      ctx.restore();
     }
     lm.forEach((p, i) => {
       if (i < 11) return; // skip face points
@@ -155,11 +184,18 @@ export function usePoseTracker(els: {
     }
     const raw = tracking.compute(lm);
     smooth = smooth === null ? raw : smooth * (1 - SMOOTHING) + raw * SMOOTHING;
-    value.value = Math.round(smooth);
-    history.push({ t: now, v: smooth });
+    // Measured from the resting level seen in the last seconds, when the camera angle shifts the start.
+    let signal = smooth;
+    if (tracking.baseline) {
+      rest.push({ t: now, v: smooth });
+      while (rest.length && now - rest[0]!.t > HISTORY_MS) rest.shift();
+      signal = smooth - Math.min(...rest.map((r) => r.v));
+    }
+    value.value = Math.round(signal);
+    history.push({ t: now, v: signal });
     while (history.length && now - history[0]!.t > HISTORY_MS) history.shift();
     if (counting.value) {
-      const e = counter.push(smooth, now);
+      const e = counter.push(signal, now);
       if (counter.atTop !== atTop.value || !lastMove.value) lastMove.value = now;
       if (counter.atTop && !atTop.value) els.onTop?.();
       atTop.value = counter.atTop;

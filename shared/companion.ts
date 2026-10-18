@@ -1,5 +1,6 @@
 import { GOAL_AREAS, NOTE_KINDS, pick, str, type GoalArea, type NoteKind } from "./model";
 import { RECOVERY_TOPICS, type RecoveryTopic } from "./recovery";
+import { TALK_TOPICS, type TalkTopic } from "./talkNotes";
 
 // Talk with Langkah (AI-09, PAS-19): a listening companion with hard limits. The model only proposes;
 // rules decide crisis handling, and every direct change waits for the patient's "Yes" (PAS-17).
@@ -15,7 +16,8 @@ export type Proposal =
   | { tool: "set_exercise_time"; time: string }
   | { tool: "update_contact"; phone: string; email: string }
   | { tool: "request_profile_change"; text: string };
-export type NoteDraft = { kind: NoteKind; quote: string; summary: string };
+/** topic and asked feed routeTalkNote (talkNotes.ts), which decides where a note goes. */
+export type NoteDraft = { kind: NoteKind; quote: string; summary: string; topic?: TalkTopic; asked?: boolean };
 /** card: one "Understand my recovery" card to show under the reply (PAS-16), fixed text, never rewritten. */
 export type CompanionTurn = { reply: string; notes: NoteDraft[]; proposals: Proposal[]; card: RecoveryTopic | null };
 
@@ -26,13 +28,15 @@ export const companionSchema = {
     reply: { type: "STRING", description: "What you say to the patient, 1-4 short sentences, in the patient's language." },
     notes: {
       type: "ARRAY",
-      description: "Only things the care team should know (a complaint, need, worry, request or question). Empty for small talk.",
+      description: "Things worth keeping for the clinicians: a body finding, a need, a question for the doctor, or how the patient is feeling. Empty for small talk. Never mention these to the patient.",
       items: {
         type: "OBJECT",
         properties: {
           kind: { type: "STRING", enum: ["complaint", "need", "worry", "request", "question", "goal_change", "life_event"] },
           quote: { type: "STRING", description: "The patient's own words, short." },
           summary: { type: "STRING", description: "One line in English for the clinician." },
+          topic: { type: "STRING", enum: [...TALK_TOPICS], description: "body: pain, phantom pain, wound, skin, a fall, sleep lost to pain, exercises, medicine, equipment. wellbeing: feelings, worries, sadness, fear, loneliness, family stress. other: anything else." },
+          asked: { type: "BOOLEAN", description: "True only when the patient clearly asked for this to go to the doctor or physio, or asked something only they can answer." },
         },
         required: ["kind", "quote", "summary"],
       },
@@ -62,7 +66,7 @@ export const companionSchema = {
 export function parseCompanion(raw: any): CompanionTurn {
   const notes = (Array.isArray(raw?.notes) ? raw.notes : []).flatMap((n: any): NoteDraft[] => {
     const quote = str(n?.quote, 400);
-    return quote ? [{ kind: pick(n?.kind, NOTE_KINDS, "question"), quote, summary: str(n?.summary, 160) || quote.slice(0, 160) }] : [];
+    return quote ? [{ kind: pick(n?.kind, NOTE_KINDS, "question"), quote, summary: str(n?.summary, 160) || quote.slice(0, 160), topic: pick(n?.topic, TALK_TOPICS, "other"), asked: n?.asked === true }] : [];
   });
   const proposals = (Array.isArray(raw?.proposals) ? raw.proposals : []).flatMap((p: any): Proposal[] => {
     const text = str(p?.text, 160);
