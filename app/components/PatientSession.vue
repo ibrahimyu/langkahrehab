@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { CircleAlert, Minus, Pause, Play, Plus, Settings2 } from "lucide-vue-next";
+import type { Component } from "vue";
+import { CircleAlert, Feather, Gauge, Minus, Mountain, Pause, Play, Plus, Settings2 } from "lucide-vue-next";
 import { holdLines, repLine } from "#shared/cues";
 import { exerciseById } from "#shared/exercises";
 import { formBand, mainTip, average } from "#shared/form";
@@ -19,6 +20,8 @@ const emit = defineEmits<{ saved: [sessionId: string] }>();
 
 const SETTINGS_KEY = "langkah-session-settings";
 const IDLE_MS = 20_000;
+/** After this long the coach may close a set the camera has not finished counting. */
+const SET_MAX_MS = 3 * 60_000;
 const LONG_PAUSE_MS = 10 * 60_000;
 const CUE_GAP_MS = 8000;
 
@@ -52,6 +55,8 @@ onMounted(async () => {
     else if ((navigator.hardwareConcurrency || 8) <= 4 || ((navigator as { deviceMemory?: number }).deviceMemory ?? 8) <= 3) settings.poseModel = "lite";
   } catch {}
   await load();
+  // DAT-01: no session while the physio is still preparing the plan; Today explains why.
+  if (patient.value?.plan.awaitingPhysio) navigateTo(`/patient/${props.patientId}`, { replace: true });
 });
 
 const planItems = computed(() =>
@@ -74,6 +79,9 @@ const coach = useLiveCoach({
       api(`/api/patients/${props.patientId}/${path}`, { method: "POST", body }).catch(() => pending.queueExtra(path, body));
       return { ok: true };
     }
+    // GAP-VIDEO #4: no set before the pain-right-now answer, whatever the model decides.
+    if (name === "start_set" && session.value?.painBefore === null)
+      return { ok: false, error: "First ask for their pain right now from 0 to 10 and call record_pain with when=before. Then start the set." };
     // A set starts only once the camera can see the limb it measures; the coach is told how to help.
     if (name === "start_set" && cameraBlind()) {
       startRefused = true;
@@ -82,6 +90,11 @@ const coach = useLiveCoach({
     // In camera mode the camera's count is the source of truth, whatever number the coach says.
     if (name === "log_set" && s.mode === "camera" && s.phase === "set") {
       const reps = currentLog(s).camera ?? 0;
+      // The set ends when the camera reaches the target, not when the coach guesses it is over.
+      const target = currentItem(s).reps;
+      const started = currentLog(s).startedAt ?? Date.now();
+      if (useCamera.value && trackable.value && reps < target && Date.now() - started < SET_MAX_MS)
+        return { ok: false, error: `The camera has counted ${reps} of ${target} reps. The set is not over: keep encouraging the patient. An [APP] message will say when to call log_set.` };
       return { ...applyTool(s, name, { ...args, reps }, Date.now()), loggedReps: reps, countedBy: "camera" };
     }
     return applyTool(s, name, args, Date.now());
@@ -112,7 +125,7 @@ watch(coach.state, (st) => {
 });
 
 // ---- Camera ----
-type TrackerApi = { reset: () => void; start: () => Promise<void>; stop: () => void; lastMove: number; ready: boolean; framing: string | null };
+type TrackerApi = { reset: () => void; start: () => Promise<void>; stop: () => void; lastMove: number; ready: boolean; framing: string | null; live: number | null; goal: number | null; range: [number, number] | null; atTop: boolean };
 const tracker = ref<TrackerApi | null>(null);
 const item = computed(() => (session.value ? currentItem(session.value) : null));
 const shownExercise = computed(() => item.value?.exercise ?? planItems.value[0]?.exercise);
@@ -250,6 +263,12 @@ function painBefore(n: number) {
   const s = session.value!;
   applyTool(s, "record_pain", { when: "before", score: n }, Date.now());
   guideSay();
+}
+/** Coach engine: the patient may tap their pain instead of saying it; the coach is told it is recorded. */
+function painBeforeTap(n: number) {
+  const s = session.value!;
+  applyTool(s, "record_pain", { when: "before", score: n }, Date.now());
+  if (live.value) coach.say(`[APP] The patient tapped their pain right now: ${n} out of 10. It is recorded; do not ask again. Go on with the first exercise.`);
 }
 function startSet() {
   const s = session.value!;
@@ -437,6 +456,14 @@ const captionWho = computed(() => (coach.userSpeaking.value ? "you" : "coach"));
 const showType = ref(false);
 // The clinician's video next to the camera, so the patient can copy the movement.
 const showDemo = ref(true);
+/** The live measurement as a bar: where the patient is now, and where the goal line sits. */
+const meter = computed(() => {
+  const t = tracker.value;
+  if (!t?.range || t.goal === null) return null;
+  const max = Math.max(t.range[1], t.goal * 1.6);
+  const pct = (v: number) => `${Math.round((Math.min(max, Math.max(0, v)) / max) * 100)}%`;
+  return { value: t.live, fill: pct(t.live ?? 0), goal: pct(t.goal), up: t.atTop || (t.live ?? 0) >= t.goal };
+});
 const pulseKey = ref(0);
 watch(count, (n, old) => n !== null && n !== old && pulseKey.value++);
 // One bar per set across the whole plan.
@@ -492,8 +519,8 @@ onBeforeUnmount(() => {
   clearTimeout(safetyTimer);
   coach.stop();
 });
-const PAIN = Array.from({ length: 11 }, (_, n) => n);
 const DIFFS: Difficulty[] = ["easy", "ok", "hard"];
+const DIFF_ICON: Record<Difficulty, Component> = { easy: Feather, ok: Gauge, hard: Mountain };
 </script>
 
 <template>
@@ -534,90 +561,117 @@ const DIFFS: Difficulty[] = ["easy", "ok", "hard"];
         <div v-if="item" class="bar">
           <b class="imm-title">{{ item.exercise.name[lang] }}</b>
           <span class="on-night-2 hint-night">{{ T("exerciseOf", { n: session.item + 1, m: session.items.length }) }}</span>
+          <button v-if="!showDemo && shownExercise" class="demo-reopen" @click="showDemo = true">{{ T("demoShow") }}</button>
         </div>
       </div>
 
       <div class="imm-split" :class="{ 'with-demo': showDemo && !!shownExercise }">
-        <ExerciseDemo v-if="showDemo && shownExercise" class="demo-pane" :exercise-id="shownExercise.id" :level="patient.profile.level" @hide="showDemo = false" />
-        <button v-else-if="shownExercise" class="demo-reopen" @click="showDemo = true">{{ T("demoShow") }}</button>
+        <ExerciseDemo v-if="showDemo && shownExercise" class="demo-pane" :exercise-id="shownExercise.id" :level="patient.profile" @hide="showDemo = false" />
       <div class="imm-stage">
-        <PoseTracker
-          v-if="useCamera && shownExercise && trackable"
-          ref="tracker"
-          :exercise-id="shownExercise.id"
-          :limb="limbOf(patient.profile)"
-          :hold-seconds="shownExercise.holdSeconds"
-          :counting="session.phase === 'set' && !paused"
-          :model="settings.poseModel"
-        @rep="onRep"
-          @top="onTop"
-        />
-        <MediaFrame v-else-if="shownExercise" kind="video" :src="`/media/exercises/${shownExercise.id}.mp4`" :label="T('video')" />
-
-        <span v-if="item && session.phase === 'set'" class="imm-pill glass">{{ T("setOf", { n: session.current, m: item.sets }) }}</span>
-        <div v-if="count !== null && item" :key="pulseKey" class="imm-count pulse"><b>{{ count }}</b><span>/ {{ item.reps }}</span></div>
-        <div v-if="lastRep?.form && session.phase === 'set'" class="imm-form glass" :class="`band-${formBand(lastRep.form.score)}`">
-          <b>{{ lastRep.form.score }}</b>
-          <span>{{ lastRep.form.weakest ? T(`formTip_${lastRep.form.weakest}` as TextKey) : T(`formBand_${formBand(lastRep.form.score)}` as TextKey) }}</span>
+        <!-- The camera stays clear: only the skeleton and the live measurement are drawn on it. -->
+        <div class="imm-cam">
+          <PoseTracker
+            v-if="useCamera && shownExercise && trackable"
+            ref="tracker"
+            :exercise-id="shownExercise.id"
+            :limb="limbOf(patient.profile)"
+            :hold-seconds="shownExercise.holdSeconds"
+            :counting="session.phase === 'set' && !paused"
+            :model="settings.poseModel"
+            @rep="onRep"
+            @top="onTop"
+          />
+          <MediaFrame v-else-if="shownExercise" kind="video" :src="`/media/exercises/${shownExercise.id}.mp4`" :label="T('video')" />
         </div>
 
-        <!-- Guide engine: pain before -->
-        <div v-if="engine === 'guide' && session.phase === 'intro'" class="imm-center imm-panel">
-          <b class="imm-q">{{ T("sesPainBefore") }}</b>
-          <div class="pain-grid"><button v-for="n in PAIN" :key="n" class="pain-btn" @click="painBefore(n)">{{ n }}</button></div>
-          <div class="pain-ends on-night-2"><span>{{ T("sesPainLow") }}</span><span>{{ T("sesPainHigh") }}</span></div>
-        </div>
-        <!-- Guide engine: ready for the next set -->
-        <div v-else-if="engine === 'guide' && session.phase === 'ready' && item" class="imm-center imm-panel">
-          <div class="tile-big">{{ T("setOf", { n: session.current, m: item.sets }) }}</div>
-          <p class="on-night-2">{{ T("setsReps", { sets: 1, reps: item.reps }) }} · {{ item.exercise.tempo[lang] }}</p>
-          <p v-if="settings.support === 'helper'" class="helper-tip">{{ T("helperTip") }}</p>
-          <p v-if="cameraBlind()" class="helper-tip">{{ T("cueCantSee") }}</p>
-          <button class="primary big-btn pill-btn" :disabled="cameraBlind()" @click="startSet">{{ T("sesStartSet", { n: session.current }) }}</button>
-        </div>
-        <!-- Coach engine: waiting for the coach -->
-        <div v-else-if="engine === 'coach' && (session.phase === 'intro' || session.phase === 'ready')" class="imm-center">
-          <div class="tile-big">{{ T("getReady") }}</div>
-          <p v-if="session.painBefore !== null" class="on-night-2">{{ T("painBeforeAfter", { before: session.painBefore, after: "–" }) }}</p>
-        </div>
-        <!-- Rest -->
-        <div v-else-if="session.phase === 'rest'" class="imm-center">
-          <ProgressRing :value="(restLeft / restTotal) * 100" />
-          <div class="ring-num">{{ restLeft }}</div>
-          <b>{{ T("rest") }}</b>
-          <div v-if="engine === 'guide' && feel === 'ask'" class="feel">
-            <b class="imm-q">{{ T("cueHowFelt") }}</b>
-            <div class="diff-row">
-              <button class="ghost pill-btn" @click="felt('fine')">{{ T("feltFine") }}</button>
-              <button class="ghost pill-btn" @click="felt('hard')">{{ T("feltHard") }}</button>
-              <button class="ghost pill-btn" @click="felt('hurts')">{{ T("feltHurts") }}</button>
+        <!-- Everything else sits under the camera, never on top of it. -->
+        <div class="imm-hud">
+          <!-- During a set: the count and the live measurement against the goal. -->
+          <div v-if="session.phase === 'set' && item" class="hud-set">
+            <div v-if="count !== null" :key="pulseKey" class="hud-count pulse">
+              <b>{{ count }}</b><span>/ {{ item.reps }}</span>
+              <small>{{ T("setOf", { n: session.current, m: item.sets }) }}</small>
+            </div>
+            <div v-else class="hud-count">
+              <small>{{ T("setOf", { n: session.current, m: item.sets }) }}</small>
+              <span>{{ T("setsReps", { sets: 1, reps: item.reps }) }}</span>
+            </div>
+            <div v-if="meter && shownExercise" class="hud-meter" :class="{ up: meter.up }">
+              <div class="hud-meter-top"><span>{{ T(`trk_${shownExercise.id}` as TextKey) }}</span><b>{{ meter.value ?? "–" }}°</b></div>
+              <div class="meter"><i :style="{ width: meter.fill }" /><em :style="{ left: meter.goal }"><span>{{ T("trkGoal") }}</span></em></div>
+              <p class="hud-tip">
+                <template v-if="meter.up">{{ T("trkUp") }}</template>
+                <template v-else-if="lastRep?.form">{{ lastRep.form.score }} · {{ lastRep.form.weakest ? T(`formTip_${lastRep.form.weakest}` as TextKey) : T(`formBand_${formBand(lastRep.form.score)}` as TextKey) }}</template>
+                <template v-else>{{ item.exercise.tempo[lang] }}</template>
+              </p>
             </div>
           </div>
-          <div v-else-if="engine === 'guide' && feel === 'hurts'" class="feel">
-            <b class="imm-q">{{ T("feltHurtsAsk") }}</b>
-            <div class="diff-row two">
-              <button class="ghost pill-btn" @click="hurtsWorse(true)">{{ T("feltHurtsYes") }}</button>
-              <button class="ghost pill-btn" @click="hurtsWorse(false)">{{ T("feltHurtsNo") }}</button>
+
+          <!-- Guide engine: pain before -->
+          <div v-else-if="engine === 'guide' && session.phase === 'intro'" class="hud-panel">
+            <b class="imm-q">{{ T("sesPainBefore") }}</b>
+            <PatientPainPicker tone="night" :label="T('sesPainBefore')" @pick="painBefore" />
+          </div>
+          <!-- Guide engine: ready for the next set -->
+          <div v-else-if="engine === 'guide' && session.phase === 'ready' && item" class="hud-panel">
+            <b class="imm-q">{{ T("setOf", { n: session.current, m: item.sets }) }}</b>
+            <p class="on-night-2">{{ T("setsReps", { sets: 1, reps: item.reps }) }} · {{ item.exercise.tempo[lang] }}</p>
+            <p v-if="settings.support === 'helper'" class="helper-tip">{{ T("helperTip") }}</p>
+            <p v-if="cameraBlind()" class="helper-tip">{{ T("cueCantSee") }}</p>
+            <button class="primary big-btn pill-btn" :disabled="cameraBlind()" @click="startSet">{{ T("sesStartSet", { n: session.current }) }}</button>
+          </div>
+          <!-- Coach engine: waiting for the coach. The meter already moves, but nothing is counted yet. -->
+          <div v-else-if="engine === 'coach' && (session.phase === 'intro' || session.phase === 'ready')" class="hud-panel">
+            <template v-if="session.painBefore === null">
+              <b class="imm-q">{{ T("sesPainBefore") }}</b>
+              <PatientPainPicker tone="night" :label="T('sesPainBefore')" @pick="painBeforeTap" />
+            </template>
+            <b v-else class="imm-q">{{ T("getReady") }}</b>
+            <p v-if="session.painBefore !== null" class="on-night-2">{{ meter ? T("trkWaiting") : item ? `${T("setsReps", { sets: item.sets, reps: item.reps })} · ${item.exercise.tempo[lang]}` : "" }}</p>
+            <p v-if="session.painBefore !== null" class="hud-chip">{{ T("painBeforeAfter", { before: session.painBefore, after: session.painAfter ?? "–" }) }}</p>
+          </div>
+          <!-- Rest -->
+          <div v-else-if="session.phase === 'rest'" class="hud-panel hud-rest">
+            <div class="hud-ring">
+              <ProgressRing :value="(restLeft / restTotal) * 100" />
+              <div class="ring-num">{{ restLeft }}</div>
+            </div>
+            <div class="hud-rest-side">
+              <b class="imm-q">{{ T("rest") }}</b>
+              <div v-if="engine === 'guide' && feel === 'ask'" class="feel">
+                <b>{{ T("cueHowFelt") }}</b>
+                <div class="diff-row">
+                  <button class="ghost pill-btn" @click="felt('fine')">{{ T("feltFine") }}</button>
+                  <button class="ghost pill-btn" @click="felt('hard')">{{ T("feltHard") }}</button>
+                  <button class="ghost pill-btn" @click="felt('hurts')">{{ T("feltHurts") }}</button>
+                </div>
+              </div>
+              <div v-else-if="engine === 'guide' && feel === 'hurts'" class="feel">
+                <b>{{ T("feltHurtsAsk") }}</b>
+                <div class="diff-row two">
+                  <button class="ghost pill-btn" @click="hurtsWorse(true)">{{ T("feltHurtsYes") }}</button>
+                  <button class="ghost pill-btn" @click="hurtsWorse(false)">{{ T("feltHurtsNo") }}</button>
+                </div>
+              </div>
+              <button v-else class="ghost pill-btn" @click="skipRest">{{ T("skip") }}</button>
             </div>
           </div>
-          <button v-else class="ghost pill-btn" @click="skipRest">{{ T("skip") }}</button>
-        </div>
-        <!-- Guide engine: after -->
-        <div v-else-if="engine === 'guide' && session.phase === 'after'" class="imm-center imm-panel">
-          <template v-if="session.painAfter === null">
-            <b class="imm-q">{{ T("sesPainAfter") }}</b>
-            <div class="pain-grid"><button v-for="n in PAIN" :key="n" class="pain-btn" @click="painAfter(n)">{{ n }}</button></div>
-            <div class="pain-ends on-night-2"><span>{{ T("sesPainLow") }}</span><span>{{ T("sesPainHigh") }}</span></div>
-          </template>
-          <template v-else>
-            <b class="imm-q">{{ T("sesHowHard") }}</b>
-            <div class="diff-row"><button v-for="d in DIFFS" :key="d" class="ghost big-btn pill-btn" @click="finish(d)">{{ T(`diff_${d}` as TextKey) }}</button></div>
-          </template>
-        </div>
-        <div v-else-if="session.phase === 'after' || session.phase === 'done'" class="imm-center">
-          <div class="tile-big">{{ T("summary") }}</div>
-          <p class="on-night-2">{{ T("painBeforeAfter", { before: session.painBefore ?? "–", after: session.painAfter ?? "–" }) }}</p>
-          <p v-if="sessionTip" class="on-night-2">{{ T(`formTip_${sessionTip}` as TextKey) }}</p>
+          <!-- Guide engine: after -->
+          <div v-else-if="engine === 'guide' && session.phase === 'after'" class="hud-panel">
+            <template v-if="session.painAfter === null">
+              <b class="imm-q">{{ T("sesPainAfter") }}</b>
+              <PatientPainPicker tone="night" :threshold="patient?.plan.painThreshold ?? null" :label="T('sesPainAfter')" @pick="painAfter" />
+            </template>
+            <template v-else>
+              <b class="imm-q">{{ T("sesHowHard") }}</b>
+              <div class="diff-row"><button v-for="d in DIFFS" :key="d" class="ghost big-btn diff-btn" @click="finish(d)"><component :is="DIFF_ICON[d]" class="ic" aria-hidden="true" />{{ T(`diff_${d}` as TextKey) }}</button></div>
+            </template>
+          </div>
+          <div v-else-if="session.phase === 'after' || session.phase === 'done'" class="hud-panel">
+            <b class="imm-q">{{ T("summary") }}</b>
+            <p class="hud-chip">{{ T("painBeforeAfter", { before: session.painBefore ?? "–", after: session.painAfter ?? "–" }) }}</p>
+            <p v-if="sessionTip" class="on-night-2">{{ T(`formTip_${sessionTip}` as TextKey) }}</p>
+          </div>
         </div>
 
         <div v-if="paused" class="imm-center imm-panel imm-paused">
@@ -627,9 +681,11 @@ const DIFFS: Difficulty[] = ["easy", "ok", "hard"];
         </div>
 
         <div v-if="session.concern" class="imm-alert">
-          <div><b>{{ T("stopped") }}</b><span>{{ T("next_stop_contact") }}</span></div>
+          <div>
+            <b>{{ T("stopped") }}</b><span>{{ T("next_stop_contact") }}</span>
+            <span v-if="session.painAfter !== null">{{ T("painBeforeAfter", { before: session.painBefore ?? "–", after: session.painAfter }) }}</span>
+          </div>
         </div>
-
       </div>
       </div>
 
@@ -692,15 +748,10 @@ const DIFFS: Difficulty[] = ["easy", "ok", "hard"];
 .ses-center { text-align: center; justify-self: center; display: inline-flex; gap: 6px; align-items: center; }
 .imm-panel { gap: 12px; padding: 0 16px; }
 .imm-q { font-size: 1.25rem; text-align: center; }
-.pain-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; width: min(100%, 360px); }
-.pain-btn { min-height: 52px; border-radius: 14px; border: 1px solid var(--night-line); background: var(--night-raised); color: var(--on-night); font: 700 1.25rem/1 var(--display); cursor: pointer; transition: transform var(--dur-press) var(--ease-out); }
-.pain-btn:active { transform: scale(0.94); }
-.pain-ends { display: flex; justify-content: space-between; width: min(100%, 360px); font-size: 0.8125rem; }
 .diff-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; width: min(100%, 360px); }
+.diff-btn { display: grid; justify-items: center; gap: 6px; min-height: 76px; border-radius: 16px; text-transform: capitalize; }
+.diff-btn .ic { width: 24px; height: 24px; }
 .imm-paused { position: absolute; inset: 0; background: color-mix(in srgb, var(--night) 86%, transparent); }
-.imm-form { position: absolute; left: 12px; bottom: 12px; max-width: 70%; display: grid; gap: 2px; padding: 8px 12px; border-radius: 14px; }
-.imm-form b { font: 700 1.5rem/1 var(--display); }
-.imm-form.band-great b, .imm-form.band-good b { color: var(--dawn); }
 .manual-reps { font: 700 1.5rem/1 var(--display); min-width: 2ch; text-align: center; align-self: center; }
 .mic-level { height: 3px; margin-top: 8px; border-radius: 2px; background: var(--night-line); overflow: hidden; }
 .mic-level i { display: block; height: 100%; background: var(--dawn); transition: width 80ms linear; }
@@ -709,7 +760,7 @@ const DIFFS: Difficulty[] = ["easy", "ok", "hard"];
 .imm-split { position: relative; display: grid; gap: 8px; min-height: 0; }
 .imm-split.with-demo { grid-template-rows: auto minmax(0, 1fr); }
 .demo-pane { aspect-ratio: 16 / 9; }
-.demo-reopen { position: absolute; z-index: 2; top: 8px; left: 50%; transform: translateX(-50%); min-height: 36px; padding: 4px 12px; border-radius: var(--r-pill); border: 1px solid var(--night-line); background: var(--night-raised); color: var(--on-night); font-weight: 600; cursor: pointer; }
+.demo-reopen { min-height: 36px; padding: 4px 12px; border-radius: var(--r-pill); border: 1px solid var(--night-line); background: var(--night-raised); color: var(--on-night); font-weight: 600; cursor: pointer; }
 /* Side by side only when a phone is turned on its side (short and wide), not on a wide laptop window. */
 @media (orientation: landscape) and (max-height: 520px) {
   .imm-split.with-demo { grid-template-rows: none; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }

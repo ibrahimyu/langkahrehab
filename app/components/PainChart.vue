@@ -33,7 +33,7 @@ const day = (iso: string) => new Date(iso).toLocaleDateString(locale(lang.value)
         <span class="pain-day"><b>{{ weekday(s.at) }}</b>{{ day(s.at) }}</span>
       </div>
     </div>
-    <p class="pain-legend hint"><i class="before" /> {{ T("painBefore") }} <i class="after" /> {{ T("painAfterShort") }} · {{ T("painDates") }}</p>
+    <p class="pain-legend hint"><span><i class="before" /> {{ T("painBefore") }}</span><span><i class="after" /> {{ T("painAfterShort") }}</span><small>{{ T("painDates") }}</small></p>
   </section>
 </template>
 
@@ -45,9 +45,9 @@ const day = (iso: string) => new Date(iso).toLocaleDateString(locale(lang.value)
 .pain-chart { position: relative; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 4px; height: 160px; padding-top: 8px; border-bottom: 1px solid var(--line); }
 .pain-limit { position: absolute; left: 0; right: 0; border-top: 2px dashed var(--danger-ink); pointer-events: none; }
 .pain-limit span { position: absolute; left: 0; top: -20px; font-size: 0.75rem; font-weight: 700; color: var(--danger-ink); background: var(--surface); padding: 0 4px; }
-.pain-col { display: grid; grid-template-rows: 1fr auto; min-width: 0; }
+.pain-col { display: grid; grid-template-rows: 1fr auto; min-width: 0; container-type: inline-size; }
 .pain-pair { display: flex; gap: 2px; align-items: flex-end; justify-content: center; height: 100%; }
-.pain-pair i, .pain-legend i { display: inline-block; width: 14px; border-radius: 3px 3px 0 0; }
+.pain-pair i, .pain-legend i { display: inline-block; width: 14px; flex: none; border-radius: 3px 3px 0 0; }
 .pain-pair i { position: relative; min-height: 2px; }
 /* The value sits inside the top of its bar, so it never crosses the limit line. */
 .pain-pair i b { position: absolute; left: 50%; top: 1px; transform: translateX(-50%); font-size: 0.6875rem; font-style: normal; line-height: 1.4; color: var(--ink); }
@@ -58,6 +58,13 @@ const day = (iso: string) => new Date(iso).toLocaleDateString(locale(lang.value)
 .pain-pair .after.high { background: var(--danger-ink); }
 .pain-day { display: grid; font-size: 0.6875rem; line-height: 1.3; color: var(--ink-3); text-align: center; padding-top: 4px; }
 .pain-day b { color: var(--ink-2); font-weight: 600; }
-.pain-legend { display: flex; gap: 6px; align-items: center; margin: 0; }
-.pain-legend i { height: 10px; margin-left: 6px; }
+/* Too narrow for two labels side by side: keep only the "after" value, the one that matters. */
+@container (max-width: 34px) {
+  .pain-pair i { width: 40%; }
+  .pain-pair .before b { display: none; }
+}
+.pain-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; margin: 0; }
+.pain-legend span { display: inline-flex; gap: 6px; align-items: center; white-space: nowrap; }
+.pain-legend i { height: 10px; }
+.pain-legend small { flex-basis: 100%; font-size: 0.75rem; color: var(--ink-3); }
 </style>

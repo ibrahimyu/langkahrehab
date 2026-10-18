@@ -72,6 +72,12 @@ const intIn = (v: unknown, min: number, max: number) => {
   return Number.isInteger(n) && n >= min && n <= max ? n : null;
 };
 
+/** A 0–10 pain number in what the patient said ("about 8", "8 out of 10"), or null. */
+export function painIn(text: string): number | null {
+  const m = text.match(/\b(10|[0-9])\b/);
+  return m ? Number(m[1]) : null;
+}
+
 export function applyTool(s: Session, name: string, args: Record<string, unknown>, now: number): ToolResponse {
   if (s.phase === "stopped" || s.phase === "done") return fail("The session has ended.");
   const item = currentItem(s);
@@ -90,7 +96,12 @@ export function applyTool(s: Session, name: string, args: Record<string, unknown
         s.phase = "after";
         return { ok: true, next: "Ask how hard it felt: easy, OK or hard. Then call finish_session." };
       }
-      return fail('when must be "before" or "after".');
+      // Pain given between sets is the latest pain, so the summary and the report show it.
+      if (args.when === "during") {
+        s.painAfter = score;
+        return { ok: true, next: "Thank them briefly and go on as the [APP] messages say." };
+      }
+      return fail('when must be "before", "during" or "after".');
     }
 
     case "start_set": {
@@ -134,7 +145,11 @@ export function applyTool(s: Session, name: string, args: Record<string, unknown
     case "report_concern": {
       const kind = CONCERNS.includes(args.kind as ConcernKind) ? (args.kind as ConcernKind) : "other";
       const source: ConcernSource = args.source === "keyword_fallback" || args.source === "patient" ? args.source : "coach";
-      s.concern = { kind, details: String(args.details ?? "").slice(0, 300), at: now, source };
+      const details = String(args.details ?? "").slice(0, 300);
+      s.concern = { kind, details, at: now, source };
+      // A pain score that stopped the session is the pain the report shows, not "–".
+      const score = intIn(args.score, 0, 10) ?? (kind === "severe_pain" ? painIn(details) : null);
+      if (score !== null) s.painAfter = score;
       s.phase = "stopped";
       s.restUntil = null;
       if (kind === "distress")

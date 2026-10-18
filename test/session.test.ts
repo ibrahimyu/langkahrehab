@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { exerciseById } from "../shared/exercises";
-import { applyTool, createSession, endRest, toRecordExercises } from "../shared/session";
+import { applyTool, createSession, endRest, painIn, toRecordExercises } from "../shared/session";
 
 const make = () =>
   createSession("camera", [
@@ -40,4 +40,14 @@ test("invalid calls are rejected and a concern stops everything", () => {
   assert.equal(applyTool(s, "report_concern", { kind: "wound", details: "bleeding" }, 1).ok, true);
   assert.equal(s.phase, "stopped");
   assert.equal(applyTool(s, "log_set", { set: 1, reps: 3 }, 2).ok, false);
+});
+
+test("pain given between sets or with a concern reaches the summary", () => {
+  const s = make();
+  applyTool(s, "record_pain", { when: "before", score: 4 }, 0);
+  assert.equal(applyTool(s, "record_pain", { when: "during", score: 6 }, 1).ok, true);
+  assert.equal(s.painAfter, 6);
+  applyTool(s, "report_concern", { kind: "severe_pain", details: "it is 8 now, very sharp" }, 2);
+  assert.equal(s.painAfter, 8);
+  assert.equal(painIn("no number"), null);
 });
