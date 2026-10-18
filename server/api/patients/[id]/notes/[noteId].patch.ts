@@ -1,3 +1,4 @@
+import { logActivity } from "#shared/activity";
 import { str } from "#shared/model";
 import { detectRedFlags } from "#shared/redflags";
 import { notesFor } from "#shared/permissions";
@@ -42,7 +43,11 @@ export default defineEventHandler(async (event) => {
         n.readBy = null;
       }
       if (b.discussAtVisit !== undefined) n.discussAtVisit = !!b.discussAtVisit;
-      if (b.reply !== undefined) n.reply = str(b.reply, 600);
+      if (b.reply !== undefined) {
+        const first = !n.reply;
+        n.reply = str(b.reply, 600);
+        if (first && n.reply && n.kind === "question") logActivity(p, { at: iso, actor: "human", who: actor.role, action: "act_question_answered", params: {}, refs: [{ kind: "question", id: n.id, label: n.source === "family" ? "family" : "patient" }] });
+      }
     }
   });
   return notesFor(actor.role, p.notes);

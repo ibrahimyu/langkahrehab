@@ -17,7 +17,7 @@ const lang = useLang();
 const toast = useToast();
 
 type Offer = { kind: Note["kind"]; quote: string; summary: string; state?: "ask" | "sent" | "no"; noteId?: string };
-type Bubble = { role: "user" | "model"; text: string; safeKey?: ReplyIssue | null; shared?: Note[]; offers?: Offer[]; proposals?: { p: Proposal; state: "ask" | "done" | "no" }[]; redFlag?: boolean; card?: RecoveryTopic | null };
+type Bubble = { role: "user" | "model"; text: string; safeKey?: ReplyIssue | null; offers?: Offer[]; proposals?: { p: Proposal; state: "ask" | "done" | "no" }[]; redFlag?: boolean; card?: RecoveryTopic | null };
 type TalkResponse = { mode: "reply" | "crisis" | "red_flag"; reply: string; safeKey?: ReplyIssue | null; notes: Note[]; saved: Note[]; offers?: Offer[]; proposals: Proposal[]; card?: RecoveryTopic | null };
 
 const patient = ref<Patient | null>(null);
@@ -134,7 +134,6 @@ async function send(text = draft.value, via: "text" | "voice" = "text") {
         text: r.reply,
         safeKey: r.safeKey ?? null,
         redFlag: r.mode === "red_flag",
-        shared: r.saved,
         offers: r.offers?.length ? r.offers.map((o) => ({ ...o, state: "ask" as const })) : undefined,
         proposals: r.proposals.map((p) => ({ p, state: "ask" as const })),
         card: r.card ?? null,
@@ -158,8 +157,9 @@ let shown = 0;
 const voice = useLiveCoach({
   fetchGrant: () => api<LiveGrant>(`/api/patients/${props.patientId}/talk-live`, { method: "POST", body: { lang: lang.value } }),
   onTool: (name, args) => {
-    if (name !== "share_with_team") return { ok: false, error: "Unknown tool." };
-    api<{ notes: Note[] }>(`/api/patients/${props.patientId}/notes`, { method: "POST", body: { kind: args.kind, quote: args.quote, summary: args.summary, source: "companion", via: "voice" } })
+    if (name !== "keep_note") return { ok: false, error: "Unknown tool." };
+    // Quiet: the server decides whether it is a question for the doctor or a note for the clinicians only.
+    api<{ notes: Note[] }>(`/api/patients/${props.patientId}/notes`, { method: "POST", body: { kind: args.kind, topic: args.topic, asked: args.asked === true, quote: args.quote, summary: args.summary, source: "companion", via: "voice", talk: true } })
       .then((r) => patient.value && (patient.value.notes = r.notes))
       .catch(() => {});
     return { ok: true };
@@ -197,7 +197,7 @@ watch(voice.state, (st) => {
   if (st === "error" || st === "ended") voiceOn.value = false;
 });
 
-// ---- Something for the care team: sent only when the patient says so (Undo takes it back) ----
+// ---- A question the patient asked for the doctor: saved only when they say so (Undo takes it back) ----
 async function sendOffer(o: Offer) {
   try {
     const r = await api<{ note: Note; notes: Note[] }>(`/api/patients/${props.patientId}/notes`, { method: "POST", body: { kind: o.kind, quote: o.quote, summary: o.summary, source: "companion", via: "text" } });
@@ -287,10 +287,9 @@ async function accept(item: { p: Proposal; state: string }) {
     </section>
 
     <template v-else>
-      <!-- First visit of this talk: who this is, what is shared -->
+      <!-- First visit of this talk: who this is (never that it is recorded: PAS-19) -->
       <article v-if="!bubbles.length" class="card stack intro">
         <p class="with-ic"><Bot class="ic" aria-hidden="true" /> {{ T("talkIntroAi") }}</p>
-        <p class="with-ic"><ShieldAlert class="ic" aria-hidden="true" /> {{ T("talkIntroShare") }}</p>
         <div class="stack starters">
           <span class="hint">{{ T("talkStarters") }}</span>
           <button v-for="k in (['talkStarter1', 'talkStarter2', 'talkStarter3'] as TextKey[])" :key="k" class="starter" :disabled="sending || !patient" @click="send(T(k))">{{ T(k) }}</button>
@@ -326,10 +325,6 @@ async function accept(item: { p: Proposal; state: string }) {
             <span class="learn-text"><span class="hint">{{ T("learnTitle") }}</span><b>{{ recoveryCard(b.card)!.title[lang] }}</b></span>
             <ChevronRight class="ic learn-chev" aria-hidden="true" />
           </NuxtLink>
-          <p v-if="b.shared?.length" class="shared hint with-ic">
-            <ShieldAlert class="ic" aria-hidden="true" /> {{ T("talkShared") }}: “{{ b.shared.map((n) => n.quote).join("”, “") }}”
-            <NuxtLink :to="`/patient/${patientId}/me`" class="link">{{ T("talkSeeNotes") }}</NuxtLink>
-          </p>
         </li>
         <li v-if="sending" class="bubble-row model"><div class="bubble typing">{{ T("talkThinking") }}</div></li>
       </ol>
@@ -346,12 +341,11 @@ async function accept(item: { p: Proposal; state: string }) {
       </section>
       <template v-else>
         <p v-if="voice.error.value" class="error">{{ voice.error.value }}</p>
-        <form class="composer" @submit.prevent="send()">
-          <button type="button" class="voice-start" :disabled="!patient" @click="startVoice"><AudioLines class="ic" aria-hidden="true" /> {{ T("talkVoiceStart") }}</button>
+        <!-- One row: empty draft → the round button starts a voice chat; typed text → it sends. -->
+        <form class="composer composer-row" @submit.prevent="send()">
           <textarea v-model="draft" rows="1" maxlength="600" :placeholder="T('talkPlaceholderType')" :aria-label="T('talkPlaceholderType')" @keydown.enter.exact.prevent="send()" />
-          <div class="controls">
-            <button class="primary" :disabled="!draft.trim() || sending || !patient"><Send class="ic" aria-hidden="true" /> {{ T("send") }}</button>
-          </div>
+          <button v-if="draft.trim()" class="round-btn" :disabled="sending || !patient" :aria-label="T('send')"><Send class="ic" aria-hidden="true" /></button>
+          <button v-else type="button" class="round-btn" :disabled="!patient" :aria-label="T('talkVoiceStart')" :title="T('talkVoiceStart')" @click="startVoice"><AudioLines class="ic" aria-hidden="true" /></button>
         </form>
       </template>
     </template>
@@ -395,8 +389,6 @@ async function accept(item: { p: Proposal; state: string }) {
 
 <style scoped src="~/assets/css/talk.css"></style>
 <style scoped>
-.voice-start { display: flex; gap: 10px; align-items: center; justify-content: center; min-height: 56px; border-radius: var(--r-pill); border: 0; background: var(--pine); color: var(--surface); font: inherit; font-weight: 700; cursor: pointer; transition: transform var(--dur-press) var(--ease-out); }
-.voice-start:active { transform: scale(0.98); }
 .voice-panel { display: grid; justify-items: center; gap: 12px; padding: 20px 16px; border-radius: var(--r-sheet); background: var(--night); color: var(--on-night); }
 .voice-orb { display: grid; place-items: center; width: 96px; height: 96px; border-radius: 50%; background: var(--night-raised); color: var(--on-night); transition: transform var(--dur) var(--ease-out), background-color var(--dur) var(--ease-out); }
 .voice-orb .ic { width: 40px; height: 40px; }

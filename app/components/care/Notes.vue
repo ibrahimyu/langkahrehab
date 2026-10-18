@@ -76,10 +76,12 @@ const roleName = (r: CareRole) => T(r === "doctor" ? "roleDoctor" : "rolePhysio"
           <span class="cr-actions">
             <span v-if="n.urgency !== 'normal'" class="pill alert-pill" :class="n.urgency === 'now' ? 'urgent' : 'medium'"><ShieldAlert class="ic" aria-hidden="true" /> {{ T(n.urgency === "now" ? "crUrgent" : "crWatch") }}</span>
             <span class="pill">{{ T(`note_${n.kind}` as TextKey) }}</span>
+            <span v-if="n.clinicianOnly && n.topic" class="pill">{{ T(`crTopic_${n.topic}` as TextKey) }}</span>
             <span v-if="n.discussAtVisit" class="pill cr-visit"><Star class="ic" aria-hidden="true" /> {{ T("crAtVisit") }}</span>
           </span>
           <span class="cr-meta">{{ when(n.at) }} · {{ T(`crSrc_${n.source}` as TextKey) }} · {{ T(`via_${n.via}` as TextKey) }}</span>
         </div>
+        <p v-if="n.clinicianOnly" class="cr-meta with-ic"><EyeOff class="ic" aria-hidden="true" /> {{ T("crTalkPrivate") }}</p>
         <p class="cr-quote">“{{ n.quote }}”</p>
         <p v-if="n.summary && n.summary !== n.quote && !n.quote.startsWith(n.summary)" class="hint">{{ n.summary }}</p>
 
@@ -109,7 +111,7 @@ const roleName = (r: CareRole) => T(r === "doctor" ? "roleDoctor" : "rolePhysio"
           <button class="ghost small-btn" :class="{ 'cr-on': n.discussAtVisit }" :aria-pressed="n.discussAtVisit" :disabled="busy === n.id" @click="toggleDiscuss(n)">
             <Star class="ic" aria-hidden="true" /> {{ T("crDiscuss") }}
           </button>
-          <button v-if="!n.reply && replying !== n.id" class="ghost small-btn" @click="startReply(n)"><MessageSquareReply class="ic" aria-hidden="true" /> {{ T("crReply") }}</button>
+          <button v-if="!n.reply && replying !== n.id && !n.clinicianOnly" class="ghost small-btn" @click="startReply(n)"><MessageSquareReply class="ic" aria-hidden="true" /> {{ T("crReply") }}</button>
         </div>
         <p v-if="n.readAt && n.readBy" class="cr-meta with-ic"><Eye class="ic" aria-hidden="true" /> {{ T("crReadBy", { who: roleName(n.readBy), date: when(n.readAt) }) }}</p>
       </li>

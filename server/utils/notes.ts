@@ -1,7 +1,7 @@
 import { newId, type Note, type NoteKind } from "#shared/model";
 
 /** A note for the care team in the patient's own words (PAS-18). Urgency is set by rules, never by the model. */
-export function buildNote(f: { kind: NoteKind; quote: string; summary?: string; urgency: Note["urgency"]; source: Note["source"]; via: Note["via"]; at: string }): Note {
+export function buildNote(f: { kind: NoteKind; quote: string; summary?: string; urgency: Note["urgency"]; source: Note["source"]; via: Note["via"]; at: string; clinicianOnly?: boolean; topic?: Note["topic"] }): Note {
   return {
     id: newId(),
     at: f.at,
@@ -12,6 +12,8 @@ export function buildNote(f: { kind: NoteKind; quote: string; summary?: string; 
     source: f.source,
     via: f.via,
     private: false,
+    ...(f.clinicianOnly ? { clinicianOnly: true } : {}),
+    ...(f.topic ? { topic: f.topic } : {}),
     readAt: null,
     readBy: null,
     discussAtVisit: f.urgency === "now",
