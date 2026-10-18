@@ -19,3 +19,13 @@ test("the level-specific video wins, and ids look like YouTube ids", () => {
   assert.equal(videoFor("bridging", "below_knee")?.youtubeId, "IWfo3Kc5gQY");
   for (const v of exerciseVideos) assert.match(v.youtubeId, /^[\w-]{11}$/);
 });
+
+test("videoFor uses the exercise site and levels with the patient's limbs", () => {
+  const arm = { level: "none" as const, side: "left" as const, limbs: [{ site: "upper" as const, side: "right" as const, level: "below_elbow" as const }] };
+  assert.equal(videoFor("bridging", arm), null, "an arm-only patient gets no leg video");
+  const legAndArm = { level: "above_knee" as const, side: "left" as const, limbs: [{ site: "upper" as const, side: "right" as const, level: "below_elbow" as const }, { site: "lower" as const, side: "left" as const, level: "hip" as const }] };
+  assert.equal(videoFor("bridging", legAndArm)?.youtubeId, "MD5j-NixeOA");
+  assert.equal(videoFor("seated-knee-straighten", { site: "lower", side: "left", level: "above_knee" }), null, "no knee, no knee video");
+  assert.equal(videoFor("bridging", { level: "none", side: "left" })?.youtubeId, "IWfo3Kc5gQY", "a tester gets the leg video");
+  for (const v of exerciseVideos) assert.ok(v.site === "lower" || v.site === "upper");
+});

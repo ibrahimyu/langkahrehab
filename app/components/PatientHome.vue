@@ -139,7 +139,14 @@ async function askCheckup() {
       <InstallHint v-if="variant === 'home'" :sessions="p.sessions.length" />
 
       <!-- Now: today's plan, how long it takes, and Start (PAS-01). Tap the card for the detail. -->
-      <div class="tile wide now-card tap">
+      <!-- DOK-01/DAT-01: a plan made from the discharge letter waits for the physio; no Start until then. -->
+      <div v-if="p.plan.awaitingPhysio" class="tile wide now-card waiting" role="status">
+        <span class="tile-label"><HeartHandshake class="ic" aria-hidden="true" /> {{ T("today") }}</span>
+        <b class="now-title">{{ T("planWaitingTitle") }}</b>
+        <p class="hint">{{ T("planWaitingBody") }}</p>
+        <NuxtLink v-if="inApp" :to="`${base}/questions`" class="primary big-btn now-start"><MessageCircleQuestion class="ic" aria-hidden="true" /> {{ T("planWaitingAsk") }}</NuxtLink>
+      </div>
+      <div v-else class="tile wide now-card tap">
         <button class="tap-cover" :aria-label="T('today')" @click="sheet = 'plan'" />
         <div class="now-top">
           <span class="tile-label tap-label">{{ T("today") }} <ChevronRight class="ic" aria-hidden="true" /></span>
@@ -243,7 +250,7 @@ async function askCheckup() {
     <div v-if="p" class="stack">
       <ul class="detail-list">
         <li v-for="item in p.plan.items" :key="item.exerciseId">
-          <ExerciseVideoButton :exercise-id="item.exerciseId" :level="p.profile.level" />
+          <ExerciseVideoButton :exercise-id="item.exerciseId" :level="p.profile" />
           <NuxtLink :to="`/patient/${patientId}/exercise/${item.exerciseId}`" class="detail-main"><b>{{ exerciseById(item.exerciseId)?.name[lang] }}</b><span class="hint">{{ T("setsReps", { sets: item.sets, reps: item.reps }) }} · {{ T("howToDo") }} →</span></NuxtLink>
         </li>
       </ul>

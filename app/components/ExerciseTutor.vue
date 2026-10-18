@@ -56,7 +56,7 @@ const current = computed(() => steps.value[step.value]);
 const readText = computed(() => current.value?.lines.join(" ") ?? "");
 
 // ---- Video (YouTube player API over postMessage, so speed and replay work without loading a script) ----
-const video = computed(() => (patient.value ? videoFor(props.exerciseId, patient.value.profile.level) : null));
+const video = computed(() => (patient.value ? videoFor(props.exerciseId, patient.value.profile) : null));
 const frame = ref<HTMLIFrameElement | null>(null);
 const slow = ref(false);
 const playing = ref(false);
@@ -226,7 +226,7 @@ function onRep(e: RepEvent) {
           <p class="hint">{{ T("tutPracticeHint") }}</p>
           <p class="hint">{{ T(`camPlace_${exerciseId}` as TextKey) }}</p>
           <div v-if="practising" class="tut-split">
-          <ExerciseDemo v-if="showDemo" :exercise-id="exerciseId" :level="patient.profile.level" @hide="showDemo = false" />
+          <ExerciseDemo v-if="showDemo" :exercise-id="exerciseId" :level="patient.profile" @hide="showDemo = false" />
           <div class="tut-cam">
             <PoseTracker ref="tracker" :exercise-id="exerciseId" :limb="limbOf(patient.profile)" :hold-seconds="exercise.holdSeconds" :counting="true" model="full" :analysis="analysis" @rep="onRep" @top="onTop" />
             <div class="tut-score glass">

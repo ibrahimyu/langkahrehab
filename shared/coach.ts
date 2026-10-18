@@ -3,7 +3,15 @@
 
 import { exerciseById, howTo, type Exercise, type Lang } from "./exercises";
 import { schedule } from "./planDiff";
+import { limbName, limbsOf, type Limb } from "./limbs";
 import { CONCERNS, DIARY_KINDS, MEMORY_KINDS, describeProfile, type CountMode, type Patient } from "./model";
+import type { Level, Side } from "./pose";
+
+/** The amputated limb(s) in plain English for prompts: "left leg", "right arm", "left leg or right hand" (PAS-20). */
+export function amputatedLimbs(profile: { level: Level; side: Side; limbs?: Limb[] }): string {
+  const names = limbsOf(profile).map((l) => limbName("en", l));
+  return names.length ? names.join(" or ") : "limb";
+}
 
 export type CoachOptions = {
   mode: CountMode;
@@ -46,9 +54,9 @@ export function buildInstruction(p: Patient, o: CoachOptions, context: string) {
     .join("\n");
 
   const steps = [
-    "Greet the patient by name, say you are their AI coach, and ask for their pain right now on a scale of 0 to 10. Their answer, even a vague one like \"maybe three\", is their pain right now: call record_pain with when=before, never log_diary.",
+    "Greet the patient by name, say you are their AI coach, and ask for their pain right now on a scale of 0 to 10. Their answer, even a vague one like \"maybe three\", is their pain right now: call record_pain with when=before, never log_diary. Always do this first, even if the patient says they are ready: never call start_set before record_pain with when=before. If an [APP] message says the patient tapped their pain, it is already recorded.",
     ...(o.askDiary
-      ? ["Then ask one separate question: whether they have felt pain in the missing part of the leg (phantom limb pain) since last time, and how strong from 0 to 10. Only the number they give in answer to this question goes to log_diary with kind=phantom_pain. If they say no, call log_diary with kind=phantom_pain and score 0. Do not ask about their pain right now again. Keep it short."]
+      ? [`Then ask one separate question: whether they have felt pain in the missing part of their ${amputatedLimbs(p.profile)} (phantom limb pain) since last time, and how strong from 0 to 10. Only the number they give in answer to this question goes to log_diary with kind=phantom_pain. If they say no, call log_diary with kind=phantom_pain and score 0. Do not ask about their pain right now again. Keep it short.`]
       : []),
     "Explain the first exercise in one or two short sentences and ask if they are ready.",
     'When they are ready, call start_set with the set number, then say "start" in their language.',
@@ -65,7 +73,7 @@ export function buildInstruction(p: Patient, o: CoachOptions, context: string) {
 ${language[lang]} ${SIMPLE} Keep each turn to one or two short sentences. After you ask a question, stop and wait for the answer: never answer for the patient, never assume what they said, and if you did not hear an answer, ask again gently. You cannot see the patient: never say their position or movement is right unless an [APP] message says so.
 
 About the patient, entered by their doctor: ${describeProfile(p.profile)}
-Name the side when you explain, for example "your left leg", instead of "the amputated leg". Never ask about their amputation details; the doctor already recorded them. Respect any restrictions.
+Name the side and the right body part when you explain, for example "your ${limbsOf(p.profile)[0] ? limbName("en", limbsOf(p.profile)[0]!) : "left leg"}", instead of "the amputated limb". Never call an arm or hand a leg, or a leg an arm. Never ask about their amputation details; the doctor already recorded them. Respect any restrictions.
 
 Today's plan (version ${p.plan.version}), set by the physiotherapist, done ${schedule(p.plan).perDay} time(s) a day, ${schedule(p.plan).daysPerWeek} day(s) a week. Do the exercises in this order and never change them:
 ${items}${p.plan.note ? `\nNote from the physiotherapist: ${p.plan.note}` : ""}
@@ -76,11 +84,11 @@ ${context}
 Session flow:
 ${steps.map((step, i) => `${i + 1}. ${step}`).join("\n")}
 
-Pain is always a number from 0 to 10. If the patient describes pain in words, ask for a number.
+Pain is always a number from 0 to 10. If the patient describes pain in words, ask for a number. Whenever they give a pain number between sets, call record_pain with when=during.
 
 Remembering: when the patient tells you something worth remembering for next time (a goal, what motivates them, an exercise that feels hard, how they like to be coached, or relevant life context such as who helps them), call save_memory with one short sentence. Do not save medicines, diagnoses or private details unrelated to rehab. If they mention their mood, you may call log_diary with kind=mood (0 very low, 10 very good).
 
-Safety: if the patient mentions an open wound or bleeding on the amputated leg, signs of infection (spreading redness, warmth, pus, fever), a fall, chest pain, trouble breathing, dizziness or fainting, or sharp, new or severe pain, call report_concern right away, then tell them to stop and rest and to contact their clinic today, or emergency services if it is an emergency. Do not continue the exercise after that.
+Safety: if the patient mentions an open wound or bleeding on the amputated ${amputatedLimbs(p.profile)}, signs of infection (spreading redness, warmth, pus, fever), a fall, chest pain, trouble breathing, dizziness or fainting, or sharp, new or severe pain, call report_concern right away, then tell them to stop and rest and to contact their clinic today, or emergency services if it is an emergency. Do not continue the exercise after that.
 
 Never diagnose, never suggest medicine, and never change, add or skip exercises, sets, reps or intensity. If asked, say their physiotherapist decides.
 
@@ -92,11 +100,11 @@ export const coachTools = [
     functionDeclarations: [
       {
         name: "record_pain",
-        description: "Record the patient's pain score from 0 to 10, before or after the exercises.",
+        description: "Record the patient's pain score from 0 to 10: before the exercises, during (any pain number given between sets), or after the exercises.",
         parameters: {
           type: "OBJECT",
           properties: {
-            when: { type: "STRING", enum: ["before", "after"] },
+            when: { type: "STRING", enum: ["before", "during", "after"] },
             score: { type: "INTEGER", description: "0 = no pain, 10 = worst pain" },
           },
           required: ["when", "score"],
@@ -124,6 +132,7 @@ export const coachTools = [
           properties: {
             kind: { type: "STRING", enum: [...CONCERNS] },
             details: { type: "STRING", description: "What the patient said, briefly" },
+            score: { type: "INTEGER", description: "The pain score 0–10 if the patient gave one" },
           },
           required: ["kind", "details"],
         },
@@ -151,7 +160,7 @@ export const coachTools = [
       },
       {
         name: "log_diary",
-        description: "Log phantom limb pain, phantom sensation or mood with a 0–10 score. Use a phantom kind only for an answer about the missing part of the leg, never for their pain right now (that is record_pain).",
+        description: "Log phantom limb pain, phantom sensation or mood with a 0–10 score. Use a phantom kind only for an answer about the missing part of the amputated limb (leg, foot, arm or hand), never for their pain right now (that is record_pain).",
         parameters: {
           type: "OBJECT",
           properties: {

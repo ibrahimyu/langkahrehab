@@ -28,7 +28,7 @@ const items = computed(() =>
   (patient.value?.plan.items ?? []).flatMap((i) => {
     const e = exerciseById(i.exerciseId);
     if (!e) return [];
-    const v = videoFor(e.id, patient.value!.profile.level);
+    const v = videoFor(e.id, patient.value!.profile);
     return [{ ...i, e, thumb: v ? thumbnailUrl(v) : null }];
   }),
 );

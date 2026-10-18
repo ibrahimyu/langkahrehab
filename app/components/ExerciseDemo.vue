@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { EyeOff, Play } from "lucide-vue-next";
-import type { Level } from "#shared/pose";
+import type { Level, Side } from "#shared/pose";
+import type { Limb } from "#shared/limbs";
 import { videoFor } from "#shared/videos";
 
 // The clinician's video playing next to the camera, muted and looping, so the patient can copy the
 // movement while the camera checks it. Loads only after the first tap (no autoplay data cost).
-const props = defineProps<{ exerciseId: string; level: Level }>();
+const props = defineProps<{ exerciseId: string; level: Level | { level: Level; side: Side; limbs?: Limb[] } }>();
 const emit = defineEmits<{ hide: [] }>();
 const T = useT();
 const video = computed(() => videoFor(props.exerciseId, props.level));

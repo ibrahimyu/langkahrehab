@@ -18,6 +18,8 @@
   --pine-hover: #0a4a45; /* white on it 10.1 */
   --pine-soft: #e3f1ee; /* pine on it 6.6 */
   --pine-light: #9dd3cb; /* 9.0 on night; ink on it 9.0 */
+  --track: #ffc845; /* the measured body line on the camera; ink on it */
+  --track-up: #7be0a0; /* the measured line at the top of the movement */
   --dawn: #f4b183; /* field only: ink on it 8.2; 1.8 on white, never text */
   --dawn-ink: #9a4a1c; /* 6.2 on surface, 5.7 on canvas */
   --dawn-soft: #fdebdd; /* dawn-ink on it 5.4 */
@@ -114,6 +116,7 @@ code { font-size: 0.9em; }
 /* 16px minimum so iOS does not zoom into fields. */
 input, select, textarea { border: 1px solid var(--line-strong); border-radius: var(--r-input); padding: 10px 12px; min-height: 44px; background: var(--surface); width: 100%; font-size: 1rem; transition: box-shadow var(--dur-fast) var(--ease-out); }
 input:focus-visible, select:focus-visible, textarea:focus-visible { border-color: var(--pine); border-radius: var(--r-input); }
+input[type="checkbox"], input[type="radio"] { width: 22px; height: 22px; min-height: 0; padding: 0; flex: none; accent-color: var(--pine); }
 select.auto { width: auto; }
 input.small { width: 80px; padding: 6px 8px; }
 textarea { font: 1rem/1.6 var(--font); resize: vertical; }
@@ -356,22 +359,49 @@ td.bad { color: var(--danger-ink); font-weight: 700; }
 .set-bars span { flex: 1; height: 5px; border-radius: var(--r-pill); background: var(--night-line); }
 .set-bars span.done { background: var(--dawn); }
 .set-bars span.on { background: var(--on-night); }
-.imm-stage { position: relative; border-radius: var(--r-sheet); overflow: hidden; background: var(--night-raised); min-height: 420px; }
-.imm-stage .tracker, .imm-stage .camera { position: absolute; inset: 0; height: 100%; aspect-ratio: auto; border-radius: 0; }
-.imm-stage .media { position: absolute; inset: 0; border-radius: 0; opacity: 0.55; }
+.imm-stage { position: relative; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 10px; min-height: 0; }
+/* The camera keeps the shape of its picture and is never covered; the skeleton is the hero. */
+.imm-cam { position: relative; border-radius: var(--r-sheet); overflow: hidden; background: var(--night-raised); }
+.imm-cam .tracker { display: block; }
+.imm-cam .camera { width: 100%; max-height: 52dvh; border-radius: 0; }
+.imm-cam .media { position: relative; aspect-ratio: 16 / 9; border-radius: 0; }
+/* Under the camera: the count, the live measurement, and whatever the coach is waiting for. */
+.imm-hud { display: grid; align-content: center; gap: 10px; min-height: 0; padding: 14px; border-radius: var(--r-sheet); background: var(--night-raised); }
+.hud-panel { display: grid; justify-items: center; gap: 8px; text-align: center; }
+.hud-panel p { margin: 0; }
+.hud-chip { padding: 4px 12px; border-radius: var(--r-pill); background: var(--night); color: var(--on-night); font-weight: 600; font-size: 0.9375rem; }
+.hud-set { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px; align-items: center; }
+.hud-count { display: grid; justify-items: center; min-width: 96px; padding: 8px 12px; border-radius: var(--r-sheet); background: var(--dawn); color: var(--ink); }
+.hud-count b { font: 700 clamp(3rem, 15vw, 4.25rem)/1 var(--display); }
+.hud-count span { font-size: 0.875rem; font-weight: 700; }
+.hud-count small { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.hud-count.pulse { animation: pulse 0.45s var(--ease-out); }
+.hud-meter { display: grid; gap: 8px; min-width: 0; }
+.hud-meter-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.hud-meter-top span { font-weight: 700; }
+.hud-meter-top b { font: 700 1.75rem/1 var(--display); color: var(--track); font-variant-numeric: tabular-nums; }
+.hud-meter.up .hud-meter-top b { color: var(--track-up); }
+.meter { position: relative; height: 14px; margin-bottom: 18px; border-radius: var(--r-pill); background: var(--night); }
+.meter i { display: block; height: 100%; border-radius: inherit; background: var(--track); transition: width 90ms linear; }
+.hud-meter.up .meter i { background: var(--track-up); }
+.meter em { position: absolute; top: -4px; bottom: -4px; width: 3px; margin-left: -1.5px; border-radius: 2px; background: var(--on-night); font-style: normal; }
+.meter em span { position: absolute; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 3px; font-size: 0.75rem; font-weight: 700; color: var(--on-night-2); white-space: nowrap; }
+.hud-tip { margin: 0; font-size: 0.9375rem; color: var(--on-night-2); min-height: 1.4em; overflow-wrap: anywhere; }
+.hud-meter.up .hud-tip { color: var(--track-up); font-weight: 700; }
+.hud-rest { grid-template-columns: auto minmax(0, 1fr); justify-items: start; align-items: center; text-align: left; gap: 16px; }
+.hud-ring { position: relative; display: grid; place-items: center; }
+.hud-ring .ring { width: 104px; height: 104px; }
+.hud-ring .ring .track { stroke: var(--night-line); }
+.hud-ring .ring-num { position: absolute; font: 700 2.25rem/1 var(--display); }
+.hud-rest-side { display: grid; gap: 8px; justify-items: start; min-width: 0; }
 /* Was frosted glass; now a solid raised surface: legible over any camera frame. */
 .glass { background: color-mix(in srgb, var(--night-raised) 94%, transparent); border: 1px solid var(--night-line); color: var(--on-night); }
-.imm-pill { position: absolute; top: 12px; left: 12px; padding: 6px 12px; border-radius: var(--r-pill); font-weight: 700; font-size: 0.9375rem; z-index: 2; }
-.imm-count { position: absolute; top: 12px; right: 12px; z-index: 2; min-width: 104px; padding: 8px 14px; border-radius: var(--r-sheet); background: var(--dawn); color: var(--ink); text-align: center; }
-.imm-count b { display: block; font: 700 clamp(3.5rem, 18vw, 5rem)/1 var(--display); }
-.imm-count span { font-size: 0.8125rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
-.imm-count.pulse { animation: pulse 0.45s var(--ease-out); }
 .imm-center { position: absolute; inset: 0; display: grid; place-items: center; align-content: center; gap: 8px; z-index: 2; text-align: center; padding: 20px; }
 .imm-center .ring .track { stroke: var(--night-line); }
 .imm-center .ring { width: 150px; height: 150px; }
 .imm-center .ring-num { font: 700 2.75rem/1 var(--display); margin-top: -104px; margin-bottom: 64px; }
 /* What the coach says: under the camera, at most two lines, so it never covers the patient. */
-.imm-caption { border-radius: 14px; padding: 8px 12px; display: flex; gap: 10px; align-items: center; font-size: 0.9375rem; }
+.imm-caption { min-height: 3.5em; border-radius: 14px; padding: 8px 12px; display: flex; gap: 10px; align-items: center; font-size: 0.9375rem; }
 .imm-caption > span:last-child { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 /* A phone turned on its side gets the whole width for the camera and the video. */
 @media (orientation: landscape) and (max-height: 520px) { .app-col:has(.immersive) { max-width: none; } }
@@ -432,7 +462,6 @@ td.bad { color: var(--danger-ink); font-weight: 700; }
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
 .imm-stage .alert { display: none; }
-.imm-stage .tracker { display: block; }
 .imm-stage .tile-big { color: var(--on-night); }
 .imm-stage .media { background: var(--night-raised); opacity: 1; }
 .imm-stage .media-ph { display: none; }

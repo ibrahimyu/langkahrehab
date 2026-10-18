@@ -373,7 +373,7 @@ async function addTask() {
 .check.on { background: var(--pine); border-color: var(--pine); }
 .check .ic { width: 26px; height: 26px; }
 .task-body { display: grid; gap: 6px; flex: 1; min-width: 0; padding: 6px 0; background: none; border: 0; text-align: left; color: var(--ink); cursor: pointer; font: inherit; }
-.task-title { font-weight: 600; font-size: 1.0625rem; }
+.task-title { font-weight: 600; font-size: 1.0625rem; overflow-wrap: anywhere; }
 .task.done .task-title { color: var(--ink-3); text-decoration: line-through; }
 .task-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .item-toggle { display: flex; gap: 10px; align-items: center; min-height: 44px; font-weight: 600; }
@@ -389,7 +389,7 @@ async function addTask() {
 .nav-box h3 { display: flex; gap: 8px; align-items: center; font-size: 1.0625rem; }
 .nav-find { display: grid; gap: 8px; }
 .nav-options { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-.nav-option { display: grid; gap: 4px; justify-items: start; padding: 12px; border-radius: 12px; background: var(--surface); }
+.nav-option { display: grid; gap: 4px; justify-items: start; min-width: 0; overflow-wrap: anywhere; padding: 12px; border-radius: 12px; background: var(--surface); }
 .kind-free { background: var(--good-soft); color: var(--good-ink); }
 .kind-borrow { background: var(--info-soft); color: var(--info-ink); }
 .kind-buy { background: var(--sunken); color: var(--ink-2); }
@@ -401,7 +401,7 @@ async function addTask() {
 .other-head { display: flex; align-items: center; justify-content: space-between; }
 .other-list { margin: 0; padding-left: 18px; display: grid; gap: 4px; color: var(--ink-2); }
 .other-list .link { text-align: left; }
-.detail-text { font-size: 1.0625rem; line-height: 1.55; }
+.detail-text { font-size: 1.0625rem; line-height: 1.55; overflow-wrap: anywhere; }
 .chip-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .choice { min-height: 44px; padding: 6px 16px; border-radius: var(--r-pill); border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); font-weight: 600; cursor: pointer; transition: background-color var(--dur-fast) var(--ease-out), transform var(--dur-press) var(--ease-out); }
 .choice:active { transform: scale(0.97); }

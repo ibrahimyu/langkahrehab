@@ -214,6 +214,10 @@ export type Note = {
   source: "coach" | "companion" | "typed" | "family";
   via: "voice" | "text";
   private: boolean;
+  /** Kept quietly from Talk for the clinicians only: never sent to the patient (wellbeing or body findings). */
+  clinicianOnly?: boolean;
+  /** What a Talk note is about: the body, or how the patient feels (wellbeing). */
+  topic?: "body" | "wellbeing";
   readAt: string | null;
   readBy: CareRole | null;
   discussAtVisit: boolean;
@@ -237,7 +241,7 @@ export type Preferences = {
 };
 export const defaultPreferences = (): Preferences => ({ exerciseTime: null, exerciseDays: [1, 2, 3, 4, 5, 6, 0], phone: "", email: "" });
 
-export type Brief = { text: string; lang: Lang; generatedAt: string | null; editedAt: string | null };
+export type Brief = { text: string; lang: Lang; generatedAt: string | null; editedAt: string | null; /** DOK-04: written by the daily cycle the day before the visit. */ auto?: boolean };
 
 // ---- Family (DAT-02, DAT-03, KEL-*): the people around the patient and the jobs they share ----
 export const FAMILY_RELATIONS = ["spouse", "child", "parent", "sibling", "other"] as const;

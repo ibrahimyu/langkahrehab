@@ -56,3 +56,14 @@ test("instructions name the patient's own limb and never label the body", () => 
       assert.doesNotMatch(text, /\{|amputat|diamputasi|截肢|stump|puntung/i, `${e.id} / ${lang}`);
     }
 });
+
+test("coach, brief and skin prompts name the right body part for every site (PAS-20)", async () => {
+  const { buildInstruction, amputatedLimbs } = await import("../shared/coach");
+  const { seedCase } = await import("../shared/cases");
+  const rafi = seedCase("rafi", Date.now())!;
+  const text = buildInstruction(rafi, { mode: "coach", askDiary: true }, "");
+  assert.match(text, /right arm/);
+  assert.doesNotMatch(text, /(left|right|amputated) leg|part of the leg/);
+  assert.equal(amputatedLimbs({ level: "none", side: "left", limbs: [arm, ak] }), "right arm or left leg");
+  assert.equal(amputatedLimbs({ level: "none", side: "left" }), "limb");
+});

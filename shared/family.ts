@@ -3,6 +3,7 @@
 
 import type { Lang } from "./exercises";
 import { addDays, dayKey, nextVisit } from "./calendar";
+import { limbsOf } from "./limbs";
 import { t, type TextKey } from "./i18n";
 import { templateById, TASK_TEMPLATES, type TaskTemplate } from "./familyTaskTemplates";
 import {
@@ -59,7 +60,10 @@ const HOME: FamilyTask["category"][] = ["home_safety", "equipment", "other_foot"
 
 function wanted(p: Pick<Patient, "profile" | "plan">, now: number): TaskTemplate[] {
   const risky = p.profile.cause === "diabetes" || p.profile.cause === "vascular";
-  const walker = /walker/i.test(p.profile.restrictions) || p.profile.stage === "pre_prosthetic";
+  // A walker only helps after a leg or foot amputation (PAS-20).
+  const limbs = limbsOf(p.profile);
+  const leg = !limbs.length || limbs.some((l) => l.site === "lower");
+  const walker = leg && (/walker/i.test(p.profile.restrictions) || p.profile.stage === "pre_prosthetic");
   const review = p.plan.reviewDate;
   const today = dayKey(now);
   const visitSoon = !!review && review >= today && review <= addDays(today, 2);
@@ -310,7 +314,7 @@ export function familyView(p: Patient, now: number): FamilyView {
     week: weekFacts(p, now),
     update: p.familyUpdate,
     questions: p.notes
-      .filter((n) => n.kind === "question" && !n.private)
+      .filter((n) => n.kind === "question" && !n.private && !n.clinicianOnly)
       .map((n) => ({ id: n.id, at: n.at, text: n.quote, fromFamily: n.source === "family", memberId: n.familyMemberId ?? null, reply: n.reply, answered: !!(n.reply || n.answeredAt) })),
     letters: p.letters.map(({ image, pages, ...l }) => l),
     letterExplanation: p.letterExplanation ?? null,
