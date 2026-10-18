@@ -12,7 +12,7 @@
 
 ## The problem
 
-After an amputation, recovery depends on weeks of exercise at home: conditioning the amputated leg, preventing stiff joints, building strength before a prosthesis can be fitted. Patients get a few supervised sessions, then a sheet of exercises. Many stop, and the doctor only finds out at the next visit. Rehab specialists are scarce (Indonesia still needs about 2,000 more rehab doctors), so every visit counts.
+After an amputation, recovery depends on weeks of exercise at home: conditioning the amputated leg, preventing stiff joints, building strength before a prosthesis can be fitted. Patients get a few supervised sessions, then a sheet of exercises. Many stop, and the doctor only finds out at the next visit. Rehab specialists are scarce (Indonesia has 1,121 rehab medicine specialists for about 3,000 hospitals, mostly in Java; PERDOSRI data via the Universitas Brawijaya PM&R residency), so every visit counts. In a 2026 Ohio State survey, 76% of patients did not finish their home physiotherapy exercises.
 
 ## What Langkah does
 
