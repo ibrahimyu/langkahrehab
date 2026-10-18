@@ -8,7 +8,7 @@
 |---|---|
 | Live prototype | https://langkah-148056386681.asia-southeast2.run.app |
 | Demo video | https://youtu.be/gX4cokKhzMs |
-| Pitch deck | `[deck link]` |
+| Pitch deck | https://docs.google.com/presentation/d/1fCzmHg2XKjmZksvBDkJQzpLG14krmyDK/edit?usp=sharing |
 
 ## The problem
 
