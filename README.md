@@ -7,7 +7,7 @@
 | | |
 |---|---|
 | Live prototype | https://langkah-148056386681.asia-southeast2.run.app |
-| Demo video | `[video link]` |
+| Demo video | https://youtu.be/gX4cokKhzMs |
 | Pitch deck | `[deck link]` |
 
 ## The problem
