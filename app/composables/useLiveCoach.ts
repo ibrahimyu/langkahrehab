@@ -1,6 +1,7 @@
 import type { Settings } from "#shared/settings";
 import { EnergyVad, rms } from "#shared/vad";
 import { isEcho } from "#shared/echo";
+import { Outbox, type Build } from "#shared/outbox";
 
 type Wire = Record<string, any>;
 export type LiveState = "idle" | "connecting" | "listening" | "speaking" | "ended" | "error";
@@ -21,6 +22,12 @@ const BARGE_IN_CHUNKS = 15;
 const ECHO_TAIL_MS = 500;
 /** Hangover for the metrics-only detector in auto turn mode. */
 const METRICS_HANGOVER_MS = 300;
+/** A queued app message goes out this long after the coach's voice stops, so turns do not run together. */
+const QUEUE_GAP_MS = 250;
+/** If Gemini never answers a turn, the queue does not wait for ever. */
+const REPLY_TIMEOUT_MS = 8000;
+/** What the patient said in this window can back a pain number the coach records. */
+const HEARD_WINDOW_MS = 30_000;
 
 const toBase64 = (buffer: ArrayBuffer) => {
   const bytes = new Uint8Array(buffer);
@@ -45,7 +52,7 @@ export type LiveGrant = { token: string; expiresAt: string; setup: Wire };
 export function useLiveCoach(handlers: {
   /** Asks the server for a one-use Live token for this session. */
   fetchGrant: (s: Settings) => Promise<LiveGrant>;
-  onTool: (name: string, args: Record<string, unknown>) => Record<string, unknown>;
+  onTool: (name: string, args: Record<string, unknown>) => Record<string, unknown> | Promise<Record<string, unknown>>;
   /** Patient speech transcription, as it streams in. */
   onInput?: (text: string) => void;
   onTurnStart?: () => void;
@@ -83,6 +90,13 @@ export function useLiveCoach(handlers: {
   let lastSpeechEnd = 0;
   let turnOpen = false;
   let turnTools: string[] = [];
+  /** A turn was sent (text, or the end of the patient's speech) and Gemini has not finished answering. */
+  let replyDueAt = 0;
+  const outbox = new Outbox();
+  let pump: ReturnType<typeof setInterval> | undefined;
+  /** The patient's own words (not the coach's echo), for checking the numbers the coach records. */
+  let heard: { text: string; at: number }[] = [];
+  const cancelled = new Set<string>();
 
   const note = (kind: string, detail?: string) => {
     log.value.push({ t: Math.round(performance.now() - t0), kind, detail });
@@ -96,8 +110,17 @@ export function useLiveCoach(handlers: {
     send({ realtimeInput: { audio: { data: toBase64(buf), mimeType: "audio/pcm;rate=16000" } } });
 
   const appTurns = () => settings?.turn.kind === "app";
+  // The long in-set pause is for a patient counting aloud; with the camera counting it only holds the
+  // coach back, since nothing can be said until the patient's turn ends.
   const hangover = () =>
-    !appTurns() ? METRICS_HANGOVER_MS : setActive ? settings!.turn.inSetSilenceMs : settings!.turn.silenceMs;
+    !appTurns() ? METRICS_HANGOVER_MS : setActive && settings!.mode === "patient" ? settings!.turn.inSetSilenceMs : settings!.turn.silenceMs;
+  /** Speaker latency (Bluetooth can add a quarter of a second): the room still hears the coach this long after playback ends. */
+  const outLatencyMs = () => Math.round(((out as (AudioContext & { outputLatency?: number }) | undefined)?.outputLatency || out?.baseLatency || 0) * 1000);
+  const coachAudible = (now: number) => sources.length > 0 || now - lastPlaybackEnd < ECHO_TAIL_MS + outLatencyMs();
+  /** The coach is talking, about to talk, or the patient is talking: an app message now would cut someone off. */
+  const busy = (now = performance.now()) =>
+    turnOpen || now < replyDueAt || sources.length > 0 || now - lastPlaybackEnd < QUEUE_GAP_MS + outLatencyMs() || userSpeaking.value;
+  const replyDue = () => (replyDueAt = performance.now() + REPLY_TIMEOUT_MS);
 
   const stopPlayback = () => {
     for (const s of sources) s.stop();
@@ -148,6 +171,7 @@ export function useLiveCoach(handlers: {
     handlers.onTurnStart?.();
   };
   const closeTurn = (why: string) => {
+    replyDueAt = 0;
     if (!turnOpen) return;
     turnOpen = false;
     note("coach-turn-end", why);
@@ -172,7 +196,10 @@ export function useLiveCoach(handlers: {
     if (c.inputTranscription?.text) {
       input += c.inputTranscription.text;
       // Echo of the coach is not the patient: do not count it, check it for red flags or caption it.
-      if (!isEcho(input, `${coachRecent} ${output}`)) handlers.onInput?.(c.inputTranscription.text);
+      if (!isEcho(input, `${coachRecent} ${output}`)) {
+        heard.push({ text: c.inputTranscription.text, at: Date.now() });
+        handlers.onInput?.(c.inputTranscription.text);
+      }
       note("heard", c.inputTranscription.text);
     }
     if (c.outputTranscription?.text) {
@@ -193,18 +220,13 @@ export function useLiveCoach(handlers: {
     }
     for (const call of m.toolCall?.functionCalls ?? []) {
       openTurn();
-      const args = (call.args ?? {}) as Record<string, unknown>;
       turnTools.push(call.name);
-      let response: Record<string, unknown>;
-      try {
-        response = handlers.onTool(call.name, args);
-      } catch {
-        response = { ok: false, error: "The app could not apply this call." };
-      }
-      note("tool", `${call.name} ${JSON.stringify(args)} → ${JSON.stringify(response)}`);
-      send({ toolResponse: { functionResponses: [{ id: call.id, name: call.name, response }] } });
+      void answerTool(call);
     }
-    if (m.toolCallCancellation) note("tool-cancelled", JSON.stringify(m.toolCallCancellation.ids ?? []));
+    if (m.toolCallCancellation) {
+      for (const id of m.toolCallCancellation.ids ?? []) cancelled.add(id);
+      note("tool-cancelled", JSON.stringify(m.toolCallCancellation.ids ?? []));
+    }
     if (c.turnComplete) {
       flush();
       closeTurn("complete");
@@ -215,15 +237,29 @@ export function useLiveCoach(handlers: {
     }
   };
 
+  /** The app may take a moment to answer (it waits for the patient's words to arrive); Gemini waits too. */
+  async function answerTool(call: Wire) {
+    const args = (call.args ?? {}) as Record<string, unknown>;
+    let response: Record<string, unknown>;
+    try {
+      response = await handlers.onTool(call.name, args);
+    } catch {
+      response = { ok: false, error: "The app could not apply this call." };
+    }
+    note("tool", `${call.name} ${JSON.stringify(args)} → ${JSON.stringify(response)}`);
+    if (cancelled.delete(call.id)) return;
+    send({ toolResponse: { functionResponses: [{ id: call.id, name: call.name, response }] } });
+  }
+
   const onMicChunk = (buf: ArrayBuffer) => {
     if (state.value === "connecting" || !settings) return;
     const level = rms(new Int16Array(buf));
     micLevel.value = level;
     const now = performance.now();
     vad.hangoverMs = hangover();
-    const coachAudible = sources.length > 0 || now - lastPlaybackEnd < ECHO_TAIL_MS;
-    vad.scale = coachAudible ? DUCK_SCALE : 1;
-    vad.startChunks = coachAudible ? BARGE_IN_CHUNKS : START_CHUNKS;
+    const audible = coachAudible(now);
+    vad.scale = audible ? DUCK_SCALE : 1;
+    vad.startChunks = audible ? BARGE_IN_CHUNKS : START_CHUNKS;
     const ev = micOn.value ? vad.push(level, now) : null;
 
     if (ev === "start") {
@@ -246,7 +282,10 @@ export function useLiveCoach(handlers: {
       lastSpeechEnd = vad.lastVoiceAt;
       awaitingReply = true;
       note("patient-end");
-      if (appTurns()) send({ realtimeInput: { activityEnd: {} } });
+      if (appTurns()) {
+        send({ realtimeInput: { activityEnd: {} } });
+        replyDue();
+      }
     }
   };
 
@@ -265,6 +304,10 @@ export function useLiveCoach(handlers: {
     log.value = [];
     replyGaps.value = [];
     interruptions.value = 0;
+    outbox.clear();
+    heard = [];
+    cancelled.clear();
+    replyDueAt = 0;
     t0 = performance.now();
     vad = new EnergyVad(s.turn.threshold, METRICS_HANGOVER_MS);
     try {
@@ -299,6 +342,7 @@ export function useLiveCoach(handlers: {
       micNode = new AudioWorkletNode(micContext, "langkah-microphone");
       micNode.port.onmessage = (e) => onMicChunk(e.data);
       micContext.createMediaStreamSource(stream).connect(micNode);
+      pump = setInterval(flushOutbox, 150);
     } catch (e: any) {
       fail(e?.statusMessage || e?.data?.statusMessage || e?.message || "Could not start the coach.");
     }
@@ -308,6 +352,8 @@ export function useLiveCoach(handlers: {
     flush();
     closeTurn("stopped");
     clearTimeout(expiry);
+    clearInterval(pump);
+    outbox.clear();
     stopPlayback();
     micNode?.disconnect();
     socket?.close(1000);
@@ -331,10 +377,38 @@ export function useLiveCoach(handlers: {
 
   /** Sends a text turn to the coach (app messages start with [APP]). */
   function say(text: string) {
-    lines.value.push({ role: text.startsWith("[APP]") ? "app" : "patient", text });
+    const app = text.startsWith("[APP]");
+    lines.value.push({ role: app ? "app" : "patient", text });
+    if (!app) heard.push({ text: ` ${text} `, at: Date.now() });
     note("text", text);
     send({ clientContent: { turns: [{ role: "user", parts: [{ text }] }], turnComplete: true } });
+    replyDue();
   }
+
+  /**
+   * Sends an app message once the coach is free (see Outbox). `say` is for what must go now:
+   * safety, the patient's own taps and words.
+   */
+  function post(key: string, build: Build) {
+    outbox.post(key, build);
+    flushOutbox();
+  }
+  function flushOutbox() {
+    if (!outbox.size || socket?.readyState !== WebSocket.OPEN || state.value === "connecting" || busy()) return;
+    const text = outbox.next();
+    if (!text) return;
+    note("queued-sent", text);
+    say(text);
+  }
+
+  /** What the patient said in the last half minute (their own words, not the coach's echo). */
+  function recentSpeech() {
+    const since = Date.now() - HEARD_WINDOW_MS;
+    heard = heard.filter((h) => h.at >= since);
+    return heard.map((h) => h.text).join("");
+  }
+  /** Forgets the patient's words once a number from them is recorded, so one answer is not used twice. */
+  const clearHeard = () => (heard = []);
 
   /** Adds information to the conversation without asking the coach to reply. */
   function addContext(text: string) {
@@ -354,6 +428,6 @@ export function useLiveCoach(handlers: {
 
   return {
     state, error, lines, caption, micLevel, userSpeaking, micOn, log, replyGaps, medianReplyGap,
-    interruptions, start, stop, toggleMic, say, addContext, setSetActive,
+    interruptions, start, stop, toggleMic, say, post, addContext, setSetActive, recentSpeech, clearHeard,
   };
 }

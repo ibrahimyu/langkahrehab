@@ -8,6 +8,7 @@ import type { TextKey } from "#shared/i18n";
 import { limbOf, type CountMode, type Difficulty, type Patient } from "#shared/model";
 import { tracking, type RepEvent } from "#shared/pose";
 import { detectRedFlags, SpeechWindow } from "#shared/redflags";
+import { checkSpokenScore } from "#shared/answers";
 import { applyTool, createSession, currentItem, currentLog, endRest, toRecordExercises, type Session } from "#shared/session";
 import { VOICES, defaultSettings, parseSettings, type Settings } from "#shared/settings";
 import type { LiveGrant } from "../composables/useLiveCoach";
@@ -24,6 +25,10 @@ const IDLE_MS = 20_000;
 const SET_MAX_MS = 3 * 60_000;
 const LONG_PAUSE_MS = 10 * 60_000;
 const CUE_GAP_MS = 8000;
+/** A rep the coach could not mention within this long is old news: the patient is on the next one. */
+const REP_STALE_MS = 3500;
+/** The patient's words can reach the app a moment after the coach's call that relies on them. */
+const HEARD_GRACE_MS = 1200;
 
 const api = useApi("patient");
 const lang = useLang();
@@ -70,8 +75,17 @@ function buildSession(mode: CountMode) {
 let midSetIndex: { item: number; set: number } | null = null;
 const coach = useLiveCoach({
   fetchGrant: (s) => api<LiveGrant>("/api/live-token", { method: "POST", body: { patientId: props.patientId, settings: s, lang: lang.value } }),
-  onTool: (name, args) => {
+  onTool: async (name, args) => {
     const s = session.value!;
+    // The coach may not record a pain number the patient did not say (it sometimes asks and answers itself).
+    const spoken = name === "record_pain" || (name === "log_diary" && args.kind === "phantom_pain");
+    if (name === "record_pain" && args.when === "before" && s.painBefore !== null)
+      return { ok: true, next: "Their pain right now is already recorded. Go on with the first exercise." };
+    if (spoken) {
+      const refused = await spokenScore(Number(args.score));
+      if (refused) return { ok: false, error: refused };
+      coach.clearHeard();
+    }
     if (name === "save_memory" || name === "log_diary") {
       // BUG-03: a failed send is kept on the phone and goes out with the session, never dropped.
       const path = name === "save_memory" ? "memories" : "diary";
@@ -95,9 +109,13 @@ const coach = useLiveCoach({
       const started = currentLog(s).startedAt ?? Date.now();
       if (useCamera.value && trackable.value && reps < target && Date.now() - started < SET_MAX_MS)
         return { ok: false, error: `The camera has counted ${reps} of ${target} reps. The set is not over: keep encouraging the patient. An [APP] message will say when to call log_set.` };
+      coach.clearHeard();
       return { ...applyTool(s, name, { ...args, reps }, Date.now()), loggedReps: reps, countedBy: "camera" };
     }
-    return applyTool(s, name, args, Date.now());
+    const result = applyTool(s, name, args, Date.now());
+    // Counting aloud during a set is not an answer to the next pain question.
+    if (result.ok && (name === "start_set" || name === "log_set")) coach.clearHeard();
+    return result;
   },
   onInput: (text) => {
     const s = session.value;
@@ -114,6 +132,12 @@ const coach = useLiveCoach({
     midSetIndex = null;
   },
 });
+async function spokenScore(score: number) {
+  const refused = checkSpokenScore(coach.recentSpeech(), score);
+  if (!refused) return null;
+  await new Promise((r) => setTimeout(r, HEARD_GRACE_MS));
+  return checkSpokenScore(coach.recentSpeech(), score);
+}
 const live = computed(() => engine.value === "coach" && ["connecting", "listening", "speaking"].includes(coach.state.value));
 const coachDown = ref(false);
 // The coach failing never ends the session: the app takes over from the same set.
@@ -140,6 +164,27 @@ let lastCueAt = 0;
 let targetSent = false;
 let lastCorrection: number | null = null;
 const lastRep = ref<RepEvent | null>(null);
+let lastRepAt = 0;
+/** A correction not yet said: kept until the coach is free, even if more reps come first. */
+let pendingFix = "";
+
+/** The coach's next message about the set, built when the coach is free so it names the latest rep. */
+function repMessage(): string | null {
+  const s = session.value;
+  const e = lastRep.value;
+  if (!s || s.phase !== "set" || paused.value || !e || !live.value) return null;
+  const target = currentItem(s).reps;
+  if (e.count >= target) {
+    if (targetSent) return null;
+    targetSent = true;
+    pendingFix = "";
+    return `[APP] The camera counted ${e.count} reps, the target for this set. Call log_set now.`;
+  }
+  const fix = pendingFix;
+  pendingFix = "";
+  if (!fix && Date.now() - lastRepAt > REP_STALE_MS) return null;
+  return `[APP] Camera: rep ${e.count} of ${target}, form ${e.form?.score ?? "–"}/100.${fix || " Good rep: short praise."}`;
+}
 
 function onRep(e: RepEvent) {
   const s = session.value!;
@@ -148,6 +193,7 @@ function onRep(e: RepEvent) {
   log.camera = e.count;
   if (e.form) log.form.push(e.form);
   lastRep.value = e;
+  lastRepAt = Date.now();
   const target = currentItem(s).reps;
   const cueDue = e.cue && Date.now() - lastCueAt > CUE_GAP_MS;
   if (cueDue) lastCueAt = Date.now();
@@ -163,14 +209,11 @@ function onRep(e: RepEvent) {
     return;
   }
   if (!live.value) return;
-  if (e.count >= target && !targetSent) {
-    targetSent = true;
-    coach.say(`[APP] The camera counted ${e.count} reps, the target for this set. Call log_set now.`);
-    return;
-  }
-  // The coach speaks after every rep, like a physio next to them: praise, or the one correction.
-  const fix = line.corrected && e.cue ? ` Correction: tell them to ${cueWords[e.cue]}.` : line.corrected && e.form?.weakest === "range" ? ` Correction: tell them to ${cueWords.go_further}.` : " Good rep: short praise.";
-  coach.say(`[APP] Camera: rep ${e.count} of ${target}, form ${e.form?.score ?? "–"}/100.${fix}`);
+  // The coach speaks after every rep, like a physio next to them: praise, or the one correction. It
+  // waits until the coach is free, then names the latest rep, so speech never cuts itself off.
+  const fix = line.corrected && e.cue ? ` Correction: tell them to ${cueWords[e.cue]}.` : line.corrected && e.form?.weakest === "range" ? ` Correction: tell them to ${cueWords.go_further}.` : "";
+  if (fix) pendingFix = fix;
+  coach.post("rep", repMessage);
 }
 
 // ---- Spoken hold at the top (app guide): "Hold it. 1, 2, 3. And down slowly." ----
@@ -199,15 +242,17 @@ watch(
     if (!s || paused.value || (s.phase !== "set" && s.phase !== "ready")) return;
     if (!f) {
       // In view again: the coach may start the set it was asked to hold.
-      if (startRefused && live.value && s.phase === "ready") coach.say("[APP] The camera can now see the patient. Tell them in a few words, then call start_set when they are ready.");
+      if (startRefused && live.value && s.phase === "ready")
+        coach.post("framing", () => (session.value?.phase === "ready" ? "[APP] The camera can now see the patient. Tell them in a few words, then call start_set when they are ready." : null));
       startRefused = false;
       return;
     }
     if (Date.now() - lastFramingSaid < 12_000) return;
     lastFramingSaid = Date.now();
     if (engine.value === "guide") voice.speak(T("cueCantSee"));
-    // Mid-set the coach says it at once; before a set it only needs to know (no extra turn).
-    else if (live.value && s.phase === "set") coach.say("[APP] The camera cannot see the patient well. Ask them, in a few words, to move the phone back a little.");
+    // Mid-set the coach says it as soon as it is free; before a set it only needs to know (no extra turn).
+    else if (live.value && s.phase === "set")
+      coach.post("framing", () => (tracker.value?.framing && session.value?.phase === "set" ? "[APP] The camera cannot see the patient well. Ask them, in a few words, to move the phone back a little." : null));
     else if (live.value) coach.addContext("[APP] Camera: the patient is not fully in view yet.");
   },
 );
@@ -223,6 +268,7 @@ watch(
       targetSent = false;
       idleWarned = false;
       lastRep.value = null;
+      pendingFix = "";
     }
   },
 );
@@ -332,7 +378,7 @@ watch(restLeft, (left) => {
   if (left > 0 || s?.phase !== "rest" || paused.value) return;
   const message = endRest(s);
   if (engine.value === "guide") guideSay();
-  else if (message) coach.say(message);
+  else if (message) coach.post("flow", () => (session.value?.phase === "ready" ? message : null));
 });
 const skipRest = () => session.value && (session.value.restUntil = Date.now());
 const restTotal = computed(() => (session.value ? currentItem(session.value).exercise.restSeconds : 30));
@@ -376,7 +422,8 @@ function onTick() {
   if (!last || performance.now() - last < IDLE_MS) return;
   idleWarned = true;
   if (engine.value === "guide") pause(true);
-  else if (live.value) coach.say("[APP] The camera has seen no movement for 20 seconds. Gently ask if they are OK and whether they want to continue or rest.");
+  else if (live.value)
+    coach.post("idle", () => (session.value?.phase === "set" && !paused.value ? "[APP] The camera has seen no movement for 20 seconds. Gently ask if they are OK and whether they want to continue or rest." : null));
 }
 
 // ---- Something feels wrong: the patient's own stop button ----

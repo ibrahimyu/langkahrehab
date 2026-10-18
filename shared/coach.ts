@@ -54,9 +54,9 @@ export function buildInstruction(p: Patient, o: CoachOptions, context: string) {
     .join("\n");
 
   const steps = [
-    "Greet the patient by name, say you are their AI coach, and ask for their pain right now on a scale of 0 to 10. Their answer, even a vague one like \"maybe three\", is their pain right now: call record_pain with when=before, never log_diary. Always do this first, even if the patient says they are ready: never call start_set before record_pain with when=before. If an [APP] message says the patient tapped their pain, it is already recorded.",
+    "Greet the patient by name, say you are their AI coach, and ask for their pain right now on a scale of 0 to 10. Then stop and end your turn: say nothing more until they answer, and never call record_pain before you have heard their answer. Their answer, even a vague one like \"maybe three\", is their pain right now: call record_pain with when=before, never log_diary. Always do this first, even if the patient says they are ready: never call start_set before record_pain with when=before. If an [APP] message says the patient tapped their pain, it is already recorded.",
     ...(o.askDiary
-      ? [`Then ask one separate question: whether they have felt pain in the missing part of their ${amputatedLimbs(p.profile)} (phantom limb pain) since last time, and how strong from 0 to 10. Only the number they give in answer to this question goes to log_diary with kind=phantom_pain. If they say no, call log_diary with kind=phantom_pain and score 0. Do not ask about their pain right now again. Keep it short.`]
+      ? [`Then ask one separate question: whether they have felt pain in the missing part of their ${amputatedLimbs(p.profile)} (phantom limb pain) since last time, and how strong from 0 to 10. Only the number they give in answer to this question goes to log_diary with kind=phantom_pain. Wait for the answer before calling log_diary. If they say no, call log_diary with kind=phantom_pain and score 0. Do not ask about their pain right now again. Keep it short.`]
       : []),
     "Explain the first exercise in one or two short sentences and ask if they are ready.",
     'When they are ready, call start_set with the set number, then say "start" in their language.',
