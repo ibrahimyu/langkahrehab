@@ -1,3 +1,4 @@
+import { logActivity, WHO_AI } from "#shared/activity";
 import { limbEnglish, limbsOf } from "#shared/limbs";
 import { SKIN_SIGNS, URGENCY, describeProfile, newId, pickLang, type SkinCheck, type SkinResult } from "#shared/model";
 import { addAlerts, afterSkinCheck } from "#shared/rules";
@@ -64,6 +65,7 @@ export default defineEventHandler(async (event) => {
   const alert = afterSkinCheck(check);
   const updated = await updatePatient(ws, id, (q) => {
     q.skinChecks = [...q.skinChecks, check].slice(-50);
+    logActivity(q, { at: iso, actor: "ai", who: WHO_AI, action: "act_skin", params: { urgency: check.result.urgency }, refs: [{ kind: "skin", id: check.id, label: area }] });
     if (alert) addAlerts(q, [alert]);
   });
   return { check, checks: updated.skinChecks, alert };

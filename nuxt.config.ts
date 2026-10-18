@@ -13,6 +13,8 @@ export default defineNuxtConfig({
     geminiDailyCalls: 2000,
     /** "local" (files in .data/, for development) or "firestore". */
     storage: "local",
+    /** SYS-03: secret the scheduler sends as the x-cron-secret header to POST /api/cron/daily (NUXT_CRON_SECRET). Empty = endpoint off. */
+    cronSecret: "",
     public: {
       // Firebase web config. When apiKey is set, visitors sign in anonymously and each gets their own demo copy.
       firebase: { apiKey: "", authDomain: "", projectId: "", appId: "" },

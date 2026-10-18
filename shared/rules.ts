@@ -17,6 +17,9 @@ import {
   type DiaryEntry,
 } from "./model";
 
+/** DOK-03: automatic readiness signals (pure; never `met`, never overrides a clinician's mark). Lives in readiness.ts. */
+export { readinessSignals } from "./readiness";
+
 /** Days without a session before the physio is alerted (the plan is daily). */
 export const MISSED_DAYS = 2;
 

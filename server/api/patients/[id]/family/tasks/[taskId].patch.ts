@@ -1,3 +1,4 @@
+import { logActivity } from "#shared/activity";
 import { familyView, loadsBody, sanitizeReminder, sanitizeSourcing, sanitizeTaskInput, validId } from "#shared/family";
 
 // Marks a task done or open (family), or changes who does it, the date, or the words of a task
@@ -17,6 +18,7 @@ export default defineEventHandler(async (event) => {
       t.status = done ? "done" : "open";
       t.doneAt = done ? iso : null;
       t.doneBy = done ? validId(b.by) : null;
+      if (done) logActivity(p, { at: iso, actor: "human", who: actor.role === "family" ? "family" : actor.role, action: "act_task_done", params: { title: typeof t.title === "string" ? t.title : t.title.en }, refs: [{ kind: "task", id: t.id, label: "task" }] });
     }
     if (b.reminder !== undefined || b.sourcing !== undefined) {
       assertCan(actor, "familyTask.do");

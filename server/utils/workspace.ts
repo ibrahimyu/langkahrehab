@@ -32,6 +32,24 @@ export async function seed(ws: string) {
 
 const cycles = new Map<string, ReturnType<typeof runDailyCycle>>();
 
+/**
+ * SYS-03: runs today's cycle once per workspace (parallel callers share one run). The rule result is
+ * awaited; the AI words keep going after the response (`wait` awaits them too, for the cron job).
+ */
+export async function ensureDailyCycle(event: H3Event, ws: string, workspace: Workspace, now: number, wait = false) {
+  let run = cycles.get(ws);
+  if (!run) {
+    run = runDailyCycle(event, ws, workspace, now).finally(() => cycles.delete(ws));
+    cycles.set(ws, run);
+  }
+  const cycle = await run;
+  if (cycle.ai) {
+    if (wait) await cycle.ai;
+    else (event as H3Event & { waitUntil?: (p: Promise<unknown>) => void }).waitUntil?.(cycle.ai);
+  }
+  return cycle;
+}
+
 /** The request's workspace (seeded if new). The daily navigator cycle runs on the first request of each day. */
 export async function context(event: H3Event) {
   const ws = await workspaceId(event);
@@ -48,13 +66,7 @@ export async function context(event: H3Event) {
   }
   const now = Date.now();
   if (workspace.lastDailyCycle !== isoDate(new Date(now))) {
-    // Parallel first requests of the day share one run.
-    let run = cycles.get(ws);
-    if (!run) {
-      run = runDailyCycle(event, ws, workspace, now).finally(() => cycles.delete(ws));
-      cycles.set(ws, run);
-    }
-    const cycle = await run;
+    const cycle = await ensureDailyCycle(event, ws, workspace, now);
     workspace = { ...workspace, lastDailyCycle: cycle.date, triage: {} };
   }
   return { ws, workspace, now };

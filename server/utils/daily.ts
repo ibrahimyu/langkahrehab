@@ -1,28 +1,12 @@
 import type { H3Event } from "h3";
-import { logActivity, WHO_AI, WHO_RULES } from "#shared/activity";
+import { logActivity, WHO_AI } from "#shared/activity";
+import { dailyPatientStep, proposeIfReady as propose } from "#shared/daily";
 import { isoDate, newId, type Patient, type Workspace } from "#shared/model";
-import { evaluateProgression, makeProposal, pendingProposal, templateRationale, type ProgressionResult } from "#shared/progression";
-import { addAlerts, daily, makeAlert, moodAlert } from "#shared/rules";
+import type { ProgressionResult } from "#shared/progression";
 
-/**
- * FIS-06: when the rules pass, add a pending proposal (template reason first) and its alert.
- * Returns the proposal id when one was made, so the caller can ask the AI for the reason.
- */
-export function proposeIfReady(p: Patient, now: number, groupId: string | null): { result: ProgressionResult; proposalId: string | null } {
-  const result = evaluateProgression(p, now);
-  const at = new Date(now).toISOString();
-  if (result.atMax) {
-    const already = p.activity.some((e) => e.action === "act_at_max" && e.params.v === p.plan.version);
-    if (!already) logActivity(p, { at, actor: "rule", who: WHO_RULES, action: "act_at_max", params: { v: p.plan.version }, refs: [{ kind: "plan", id: `v${p.plan.version}`, label: `Plan v${p.plan.version}` }], groupId });
-    return { result, proposalId: null };
-  }
-  if (!result.eligible || pendingProposal(p)) return { result, proposalId: null };
-  const proposal = makeProposal(p, result, at, templateRationale(p, result), "template");
-  p.proposals = [...p.proposals, proposal].slice(-20);
-  const ref = { kind: "proposal" as const, id: proposal.id, label: `Proposal for plan v${p.plan.version}` };
-  logActivity(p, { at, actor: "rule", who: WHO_RULES, action: "act_proposal_made", params: { n: result.changes.length }, refs: [ref, ...result.evidence.slice(-3)], groupId });
-  addAlerts(p, [makeAlert("proposal_pending", "low", { key: "alert_proposal_pending" }, ["physio"], at)], groupId);
-  return { result, proposalId: proposal.id };
+/** FIS-06 (shared/daily.ts): a pending proposal plus its low alert when the rules pass. */
+export function proposeIfReady(p: Patient, now: number, groupId: string | null) {
+  return propose(p, now, groupId);
 }
 
 /** AI-05: replaces the template reason with the AI's, when the AI answers. Never touches the changes. */
@@ -41,43 +25,68 @@ export async function explainProposal(event: H3Event, ws: string, patientId: str
   });
 }
 
-/** Runs promises with at most `n` at a time. */
-async function limited<T>(jobs: (() => Promise<T>)[], n: number) {
+/** DOK-04: the brief for tomorrow's visit, written by the cycle. A brief a person edited is never replaced. */
+async function autoBrief(event: H3Event, ws: string, patientId: string, now: number, groupId: string) {
+  const p = await getPatient(ws, patientId);
+  if (!p || p.brief.editedAt) return;
+  await aiBudget(event, "brief");
+  const lang = p.brief.lang ?? "en";
+  const { text } = await writeBrief(event, p, lang);
+  const iso = new Date(now).toISOString();
+  await updatePatient(ws, patientId, (q) => {
+    if (q.brief.editedAt) return;
+    q.brief = { text, lang, generatedAt: iso, editedAt: null, auto: true };
+    logActivity(q, { at: iso, actor: "ai", who: WHO_AI, action: "act_brief_auto", refs: [{ kind: "plan", id: `brief-${iso}`, label: "Brief" }], groupId });
+  });
+}
+
+/** Runs promises with at most `n` at a time; a failed job leaves the rule result (template) in place. */
+export async function limited<T>(jobs: (() => Promise<T>)[], n: number) {
   const queue = [...jobs];
   await Promise.all(Array.from({ length: Math.min(n, queue.length) }, async () => {
     while (queue.length) await queue.shift()!().catch(() => undefined);
   }));
 }
 
+export type DailyResult = { ran: boolean; date: string; alerts: number; proposals: number; briefs: number; tasks: number; ai: Promise<void> | null };
+
 /**
  * SYS-03: the daily navigator cycle, idempotent per date (Workspace.lastDailyCycle).
- * Per patient: missed/review (daily), mood (SYS-07), progression (FIS-06), then one summary event in the
- * feed. AI reasons are written after the rules, three at a time, and the template stays if the AI fails.
+ * Per patient (shared/daily.ts): missed/review, mood, progression, readiness and journey step, rule
+ * family tasks, then one summary event in the feed. Then the notifications (SYS-11). The AI writes
+ * afterwards, three at a time: proposal reasons (AI-05), tomorrow's briefs (DOK-04) and the triage per
+ * role (AI-06). The caller gets the rule result at once; `ai` settles when the words are written.
  */
-export async function runDailyCycle(event: H3Event, ws: string, workspace: Workspace, now: number) {
+export async function runDailyCycle(event: H3Event, ws: string, workspace: Workspace, now: number): Promise<DailyResult> {
   const date = isoDate(new Date(now));
-  if (workspace.lastDailyCycle === date) return { ran: false, date, alerts: 0, proposals: 0 };
+  const none = { date, alerts: 0, proposals: 0, briefs: 0, tasks: 0, ai: null };
+  if (workspace.lastDailyCycle === date) return { ran: false, ...none };
   await setWorkspace(ws, { ...workspace, lastDailyCycle: date, triage: {} });
-  let alerts = 0;
-  let proposals = 0;
-  const explain: (() => Promise<void>)[] = [];
+  const total = { alerts: 0, proposals: 0, briefs: 0, tasks: 0 };
+  const jobs: (() => Promise<void>)[] = [];
   for (const patient of await listPatients(ws)) {
     const groupId = newId();
     await updatePatient(ws, patient.id, (q) => {
-      const before = q.alerts.length;
-      addAlerts(q, daily(q, now), groupId);
-      const mood = moodAlert(q, now);
-      if (mood) addAlerts(q, [mood], groupId);
-      const { result, proposalId } = proposeIfReady(q, now, groupId);
-      const newAlerts = q.alerts.length - before - (proposalId ? 1 : 0);
-      alerts += Math.max(0, newAlerts);
-      if (proposalId) {
-        proposals++;
-        explain.push(() => explainProposal(event, ws, q.id, proposalId, result, groupId));
+      const step = dailyPatientStep(q, now, groupId, date);
+      total.alerts += step.alerts;
+      total.tasks += step.tasks;
+      if (step.proposalId) {
+        total.proposals++;
+        const { proposalId, result } = step;
+        jobs.push(() => explainProposal(event, ws, q.id, proposalId, result, groupId));
       }
-      logActivity(q, { at: new Date(now).toISOString(), actor: "rule", who: WHO_RULES, action: "act_daily", params: { alerts: Math.max(0, newAlerts), proposals: proposalId ? 1 : 0, date }, refs: [], groupId });
+      if (step.briefDue) {
+        total.briefs++;
+        jobs.push(() => autoBrief(event, ws, q.id, now, groupId));
+      }
     });
   }
-  await limited(explain, 3);
-  return { ran: true, date, alerts, proposals };
+  const patients = await listPatients(ws);
+  await syncNotifications(ws, patients, now, getRequestURL(event).origin).catch(() => undefined);
+  // One job for both roles: each saves into the same workspace document.
+  jobs.push(async () => {
+    for (const role of ["physio", "doctor"] as const) await buildTriage(event, ws, (await getWorkspace(ws)) ?? workspace, now, role, "en", patients, true);
+  });
+  const ai = limited(jobs, 3);
+  return { ran: true, date, ...total, ai };
 }
